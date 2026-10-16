@@ -3,20 +3,20 @@ import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import appCss from "../styles.css?url";
 
-const APP_NAME = "Pokizakor.tj";
+const APP_NAME = "Покизакор";
 
 export const Route = createRootRoute({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: `${APP_NAME} — стирка и химчистка ковров в Худжанде` },
+      { title: `${APP_NAME} — стирка ковров, курпача и диванов в Худжанде` },
       {
         name: "description",
         content:
-          "Стирка и химчистка ковров, диванов и ковролина в Худжанде. Вывоз и доставка. Рассчитайте стоимость онлайн — от 10 сомони за м². Pokizakor.tj.",
+          "Стирка ковров, курпача, одеял и химчистка диванов в Худжанде. Заберём и привезём за 1–3 дня, оплата после чистки. От 10 сомони за м².",
       },
-      { name: "theme-color", content: "#14211b" },
+      { name: "theme-color", content: "#0b1d42" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
@@ -27,7 +27,7 @@ export const Route = createRootRoute({
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700;800&display=swap",
       },
     ],
   }),

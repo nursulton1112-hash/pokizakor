@@ -1,488 +1,373 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
-import * as Accordion from "@radix-ui/react-accordion";
 import {
-  ArrowRight,
-  Calculator as CalculatorIcon,
-  Check,
-  ChevronDown,
-  Clock,
-  MapPin,
-  Minus,
-  Phone,
-  PhoneCall,
-  Plus,
-  ShieldCheck,
-  Sparkles,
-  Truck,
-  X,
-} from "lucide-react";
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type RefObject,
+} from "react";
+import * as Accordion from "@radix-ui/react-accordion";
+import { ArrowRight, Check, ChevronDown, Minus, Phone, Plus, X } from "lucide-react";
+import { sendLead } from "@/lib/lead";
+import {
+  CASES,
+  INSTAGRAM,
+  OFFER_PERCENT,
+  PHONE,
+  REVIEWS,
+  SERVICES,
+  SIZES,
+  T,
+  TEL,
+  WA_NUMBER,
+  WHENS,
+  type Lang,
+} from "./copy";
 
-const PHONE = "+992 92 000 00 00";
-const TEL = "tel:+992920000000";
+type Text = { readonly ru: string; readonly tg: string };
 
-type Unit = "m2" | "item";
+const LangContext = createContext<Lang>("ru");
 
-type Service = {
-  id: string;
-  name: string;
-  unit: Unit;
-  price: number;
-  hint: string;
-  note: string;
-  photo: string;
-  photoAlt: string;
-  qtyLabel?: string;
-};
+function useTx() {
+  const lang = useContext(LangContext);
+  return (text: Text) => text[lang];
+}
 
-const SERVICES: Service[] = [
-  {
-    id: "wash",
-    name: "Стирка ковра",
-    unit: "m2",
-    price: 10,
-    hint: "сомони / м²",
-    note: "Заберём и привезём",
-    photo: "/photos/wash.jpg",
-    photoAlt: "Ковёр на промышленной мойке",
-  },
-  {
-    id: "delicate",
-    name: "Шёлк и длинный ворс",
-    unit: "m2",
-    price: 15,
-    hint: "сомони / м²",
-    note: "Отдельный деликатный режим",
-    photo: "/photos/pile.jpg",
-    photoAlt: "Чистый длинный ворс ковра",
-  },
-  {
-    id: "home",
-    name: "Ковролин на дому",
-    unit: "m2",
-    price: 15,
-    hint: "сомони / м²",
-    note: "Не снимаем с пола",
-    photo: "/photos/home.jpg",
-    photoAlt: "Чистка ковролина на дому",
-  },
-  {
-    id: "sofa",
-    name: "Диван",
-    unit: "item",
-    price: 80,
-    hint: "сомони / место",
-    note: "Цена за посадочное место",
-    photo: "/photos/sofa.jpg",
-    photoAlt: "Диван после чистки",
-    qtyLabel: "Сколько мест?",
-  },
-  {
-    id: "chair",
-    name: "Кресло",
-    unit: "item",
-    price: 50,
-    hint: "сомони / шт.",
-    note: "Чистим на дому",
-    photo: "/photos/ba/chairs-after.jpg",
-    photoAlt: "Мягкая мебель после чистки",
-    qtyLabel: "Сколько кресел?",
-  },
-  {
-    id: "textile",
-    name: "Одеяло и курпача",
-    unit: "item",
-    price: 25,
-    hint: "сомони / шт.",
-    note: "Можно вместе с ковром",
-    photo: "/photos/packed.jpg",
-    photoAlt: "Одеяла упакованы после чистки",
-    qtyLabel: "Сколько штук?",
-  },
-];
+/* ---------- helpers ---------- */
 
-const NAV = [
-  { href: "#uslugi", label: "Услуги" },
-  { href: "#raschet", label: "Расчёт" },
-  { href: "#kak", label: "Как проходит" },
-  { href: "#voprosy", label: "Вопросы" },
-];
-
-const DISTRICTS = [
-  "Худжанд",
-  "34-й микрорайон",
-  "Центр",
-  "Бустон",
-  "Гулистон",
-  "Другой район Согда",
-];
-
-const WHENS = ["Сегодня", "Завтра", "На этой неделе", "Не срочно"];
-
-const STEPS = [
-  { n: "01", icon: CalculatorIcon, title: "Считаете", text: "Выбираете услугу и размер — цена видна сразу." },
-  { n: "02", icon: PhoneCall, title: "Звоним", text: "Подтверждаем время и стоимость." },
-  { n: "03", icon: Truck, title: "Забираем", text: "Приезжаем в удобное время." },
-  { n: "04", icon: Sparkles, title: "Привозим", text: "Вернём чистым и упакованным." },
-];
-
-const FAQ = [
-  { q: "Когда заберёте ковёр?", a: "Сегодня или завтра. Точное время согласуем по телефону." },
-  { q: "Как оплатить?", a: "Когда ковёр уже чистый — без предоплаты." },
-  { q: "Цвет не сядет?", a: "Проверяем стойкость краски до стирки. Если есть риск — предупредим заранее." },
-  {
-    q: "Будет ли запах после стирки?",
-    a: "Сушим в цехе и проветриваем. Если у ковра сложное загрязнение — скажем до стирки.",
-  },
-];
-
-const WHY = [
-  { icon: Clock, text: "Заберём сегодня или завтра" },
-  { icon: ShieldCheck, text: "Оплата после чистки" },
-  { icon: MapPin, text: "Худжанд и районы Согда" },
-];
-
-type Draft = {
-  name: string;
-  phone: string;
-  service: string;
-  size: string;
-  district: string;
-  when: string;
-  comment: string;
-};
-
-const INITIAL_DRAFT: Draft = {
-  name: "",
-  phone: "",
-  service: "wash",
-  size: "",
-  district: "",
-  when: "Сегодня",
-  comment: "",
-};
-
-type CalcItem = {
-  id: string;
-  serviceId: string;
-  length: string;
-  width: string;
-  qty: number;
-};
-
+type CalcItem = { id: string; serviceId: string; l: string; w: string; custom: boolean; qty: number };
 type OrderLine = { name: string; detail: string; total: number | null };
-type OrderSummary = { lines: OrderLine[]; total: number | null };
+type Order = { lines: OrderLine[]; total: number | null };
 
-const INITIAL_ITEM: CalcItem = { id: "item-1", serviceId: "wash", length: "2", width: "3", qty: 1 };
+const FIRST_ITEM: CalcItem = { id: "i1", serviceId: "carpet", l: "2", w: "3", custom: false, qty: 1 };
 
 function serviceById(id: string) {
-  return SERVICES.find((item) => item.id === id) ?? SERVICES[0];
+  return SERVICES.find((s) => s.id === id) ?? SERVICES[0];
 }
 
 function parseMeters(value: string) {
   const n = Number(value.replace(",", ".").trim());
-  if (!Number.isFinite(n) || n <= 0) return null;
-  return n;
+  return Number.isFinite(n) && n > 0 && n < 100 ? n : null;
 }
 
-function formatNumber(n: number) {
-  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(n);
+function fmt(n: number, digits = 0) {
+  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: digits }).format(digits ? n : Math.round(n));
 }
 
-function somoni(n: number) {
-  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(Math.round(n));
+function itemTotal(item: CalcItem) {
+  const s = serviceById(item.serviceId);
+  if (s.unit === "item") return item.qty * s.price;
+  const l = parseMeters(item.l);
+  const w = parseMeters(item.w);
+  return l && w ? l * w * s.price : null;
+}
+
+function itemDetail(item: CalcItem) {
+  const s = serviceById(item.serviceId);
+  if (s.unit === "item") return `${item.qty} шт.`;
+  const l = parseMeters(item.l);
+  const w = parseMeters(item.w);
+  return l && w ? `${fmt(l, 1)}×${fmt(w, 1)} м` : "";
+}
+
+function withOffer(total: number) {
+  return OFFER_PERCENT ? total * (1 - OFFER_PERCENT / 100) : total;
 }
 
 function phoneDigits(value: string) {
-  const digits = value.replace(/\D/g, "");
-  return digits.startsWith("992") ? digits.slice(3) : digits;
+  let d = value.replace(/\D/g, "");
+  if (d.startsWith("992") && d.length > 9) d = d.slice(3);
+  return d.slice(0, 9);
 }
 
-function formatPhoneInput(value: string) {
-  let digits = value.replace(/\D/g, "");
-  if (digits.startsWith("992")) digits = digits.slice(3);
-  digits = digits.slice(0, 9);
-  if (!digits) return "";
-  const parts = [digits.slice(0, 2), digits.slice(2, 5), digits.slice(5, 7), digits.slice(7, 9)].filter(Boolean);
-  return `+992 ${parts.join(" ")}`;
+function formatPhone(value: string) {
+  const d = phoneDigits(value);
+  return [d.slice(0, 2), d.slice(2, 5), d.slice(5, 7), d.slice(7, 9)].filter(Boolean).join(" ");
 }
 
-function itemTotal(item: CalcItem): number | null {
-  const service = serviceById(item.serviceId);
-  if (service.unit === "m2") {
-    const len = parseMeters(item.length);
-    const wid = parseMeters(item.width);
-    if (!len || !wid) return null;
-    return len * wid * service.price;
-  }
-  return item.qty * service.price;
-}
-
-function itemDetail(item: CalcItem): string {
-  const service = serviceById(item.serviceId);
-  if (service.unit === "m2") {
-    const len = parseMeters(item.length);
-    const wid = parseMeters(item.width);
-    return len && wid ? `${formatNumber(len)} × ${formatNumber(wid)} м` : "";
-  }
-  return `${item.qty} шт.`;
-}
-
-function isPristine(item: CalcItem) {
-  return (
-    item.serviceId === INITIAL_ITEM.serviceId &&
-    item.length === INITIAL_ITEM.length &&
-    item.width === INITIAL_ITEM.width &&
-    item.qty === INITIAL_ITEM.qty
-  );
+function waLink(text: string) {
+  return `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(text)}`;
 }
 
 function scrollToId(id: string) {
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  document.getElementById(id)?.scrollIntoView({
-    behavior: reduce ? "auto" : "smooth",
-    block: "start",
-  });
+  document.getElementById(id)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
 }
 
-const btnPrimary =
-  "press inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-base font-semibold text-primary-fg hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
-const btnGhost =
-  "press inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-line bg-surface px-5 text-base font-semibold text-fg hover:border-fg/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
-const btnOnPhoto =
-  "press inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-on-ink/50 bg-ink/25 px-5 text-base font-semibold text-on-ink backdrop-blur-md hover:bg-ink/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-on-ink";
-const fieldClass =
-  "h-12 w-full rounded-xl border border-line bg-surface px-4 text-base text-fg outline-none placeholder:text-muted/70 focus:border-primary focus:ring-4 focus:ring-primary/10";
-const sectionTitle = "text-3xl font-semibold leading-tight md:text-4xl";
-const kicker = "text-sm font-semibold uppercase tracking-[0.14em] text-primary";
-const calm = { suppressHydrationWarning: true } as const;
-
-function Reveal({
-  children,
-  className = "",
-  delay = 0,
-}: {
-  children: ReactNode;
-  className?: string;
-  delay?: number;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [shown, setShown] = useState(false);
-
+function useInView<T extends Element>(ref: RefObject<T | null>, threshold = 0.4) {
+  const [seen, setSeen] = useState(false);
   useEffect(() => {
     const node = ref.current;
-    if (!node) return;
+    if (!node || seen) return;
     if (typeof IntersectionObserver === "undefined") {
-      setShown(true);
+      setSeen(true);
       return;
     }
-    const observer = new IntersectionObserver(
+    const io = new IntersectionObserver(
       (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setShown(true);
-            observer.disconnect();
-          }
+        if (entries.some((e) => e.isIntersecting)) {
+          setSeen(true);
+          io.disconnect();
         }
       },
-      { threshold: 0.12, rootMargin: "0px 0px -8% 0px" },
+      { threshold },
     );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
+    io.observe(node);
+    return () => io.disconnect();
+  }, [ref, seen, threshold]);
+  return seen;
+}
 
+/* ---------- shared styles ---------- */
+
+const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
+const btn = `press inline-flex h-13 items-center justify-center gap-2 rounded-2xl px-5 text-[17px] font-semibold ${focusRing}`;
+const btnPrimary = `${btn} bg-primary text-primary-fg hover:bg-primary-dark`;
+const btnWa = `${btn} bg-wa text-white hover:brightness-110`;
+const field =
+  "h-13 w-full rounded-2xl border border-line bg-surface px-4 text-[17px] text-fg outline-none placeholder:text-muted/60 focus:border-primary focus:ring-4 focus:ring-primary/15";
+const h2 = "text-[28px] leading-[1.15] font-extrabold tracking-tight md:text-4xl";
+const calm = { suppressHydrationWarning: true } as const;
+
+function WaIcon({ className = "size-5" }: { className?: string }) {
   return (
-    <div
-      ref={ref}
-      className={`reveal ${shown ? "is-in" : ""} ${className}`.trim()}
-      style={delay ? { transitionDelay: `${delay}ms` } : undefined}
-    >
-      {children}
-    </div>
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91A9.85 9.85 0 0 0 12.04 2Zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.2 8.2 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24a8.24 8.24 0 0 1 8.24 8.25c0 4.54-3.7 8.23-8.24 8.23Zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.01-.38.11-.51.11-.11.25-.29.37-.43.13-.15.17-.25.25-.42.08-.17.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.84-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28Z" />
+    </svg>
   );
 }
 
-function useCountUp(target: number | null) {
-  const [value, setValue] = useState<number | null>(target);
-  const fromRef = useRef<number | null>(target);
-
-  useEffect(() => {
-    if (target === null) {
-      fromRef.current = null;
-      setValue(null);
-      return;
-    }
-    const from = fromRef.current ?? 0;
-    if (from === target) {
-      setValue(target);
-      return;
-    }
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      fromRef.current = target;
-      setValue(target);
-      return;
-    }
-    let raf = 0;
-    const started = performance.now();
-    const duration = 360;
-    const tick = (now: number) => {
-      const t = Math.min(1, (now - started) / duration);
-      const eased = 1 - Math.pow(1 - t, 3);
-      setValue(from + (target - from) * eased);
-      if (t < 1) {
-        raf = requestAnimationFrame(tick);
-      } else {
-        fromRef.current = target;
-      }
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [target]);
-
-  return value;
+function LogoMark({ className = "size-8" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 40 40" className={className} aria-hidden="true">
+      <circle cx="20" cy="20" r="20" fill="#1f55c4" />
+      <path
+        d="M20 7l3.8 9.2L33 20l-9.2 3.8L20 33l-3.8-9.2L7 20l9.2-3.8z"
+        fill="none"
+        stroke="#fff"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <circle cx="20" cy="20" r="3.2" fill="#f4b63a" />
+    </svg>
+  );
 }
 
+/* ---------- page ---------- */
+
 export function HomePage() {
-  const [draft, setDraft] = useState<Draft>(INITIAL_DRAFT);
-  const [status, setStatus] = useState<"form" | "sent">("form");
-  const [items, setItems] = useState<CalcItem[]>([INITIAL_ITEM]);
-  const [order, setOrder] = useState<OrderSummary | null>(null);
+  const [lang, setLang] = useState<Lang>("ru");
+  const [items, setItems] = useState<CalcItem[]>([FIRST_ITEM]);
+  const [order, setOrder] = useState<Order | null>(null);
   const [pulse, setPulse] = useState(0);
-  const [honey, setHoney] = useState("");
-  const itemSeq = useRef(1);
+  const [source, setSource] = useState("");
+  const seq = useRef(1);
   const nameRef = useRef<HTMLInputElement>(null);
 
-  function patch(partial: Partial<Draft>) {
-    setDraft((current) => ({ ...current, ...partial }));
-  }
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    let initial: Lang | null = null;
+    const fromUrl = params.get("lang");
+    if (fromUrl === "tg" || fromUrl === "tj") initial = "tg";
+    else if (fromUrl === "ru") initial = "ru";
+    if (!initial) {
+      try {
+        const saved = window.localStorage.getItem("lang");
+        if (saved === "ru" || saved === "tg") initial = saved;
+      } catch {
+        /* storage unavailable */
+      }
+    }
+    if (!initial && navigator.language.toLowerCase().startsWith("tg")) initial = "tg";
+    if (initial) setLang(initial);
 
-  function focusNameSoon() {
-    window.setTimeout(() => nameRef.current?.focus(), 380);
+    const parts = ["utm_source", "utm_medium", "utm_campaign", "utm_content"]
+      .map((key) => params.get(key))
+      .filter(Boolean);
+    if (params.get("fbclid")) parts.push("facebook/instagram");
+    if (!parts.length && document.referrer) {
+      try {
+        parts.push(new URL(document.referrer).hostname);
+      } catch {
+        /* ignore */
+      }
+    }
+    setSource(parts.join(" / "));
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.lang = lang === "tg" ? "tg" : "ru";
+  }, [lang]);
+
+  function switchLang(next: Lang) {
+    setLang(next);
+    try {
+      window.localStorage.setItem("lang", next);
+    } catch {
+      /* storage unavailable */
+    }
   }
 
   function goToForm() {
-    setStatus("form");
     scrollToId("zayavka");
-    focusNameSoon();
+    window.setTimeout(() => nameRef.current?.focus({ preventScroll: true }), 450);
   }
 
-  function addItem(serviceId?: string) {
-    setItems((current) => {
-      const service = serviceId ?? current[current.length - 1]?.serviceId ?? SERVICES[0].id;
-      itemSeq.current += 1;
-      return [
-        ...current,
-        { id: `item-${itemSeq.current}`, serviceId: service, length: "2", width: "3", qty: 1 },
-      ];
-    });
+  function newItem(serviceId: string): CalcItem {
+    seq.current += 1;
+    return { id: `i${seq.current}`, serviceId, l: "2", w: "3", custom: false, qty: 1 };
+  }
+
+  function addItem() {
+    setItems((cur) => [...cur, newItem(cur[cur.length - 1]?.serviceId ?? "carpet")]);
     setOrder(null);
   }
 
-  function updateItem(id: string, partial: Partial<CalcItem>) {
-    setItems((current) => current.map((item) => (item.id === id ? { ...item, ...partial } : item)));
+  function updateItem(id: string, patch: Partial<CalcItem>) {
+    setItems((cur) => cur.map((it) => (it.id === id ? { ...it, ...patch } : it)));
     setOrder(null);
   }
 
   function removeItem(id: string) {
-    setItems((current) => (current.length > 1 ? current.filter((item) => item.id !== id) : current));
+    setItems((cur) => (cur.length > 1 ? cur.filter((it) => it.id !== id) : cur));
     setOrder(null);
   }
 
-  function pickService(id: string) {
-    setItems((current) => {
-      if (current.length === 1 && isPristine(current[0])) {
-        return [{ ...current[0], serviceId: id }];
-      }
-      itemSeq.current += 1;
-      return [
-        ...current,
-        { id: `item-${itemSeq.current}`, serviceId: id, length: "2", width: "3", qty: 1 },
-      ];
+  function pickService(serviceId: string) {
+    setItems((cur) => {
+      const untouched =
+        cur.length === 1 &&
+        cur[0].serviceId === FIRST_ITEM.serviceId &&
+        cur[0].l === FIRST_ITEM.l &&
+        cur[0].w === FIRST_ITEM.w &&
+        !cur[0].custom &&
+        cur[0].qty === 1;
+      if (untouched) return [{ ...cur[0], serviceId }];
+      if (cur.some((it) => it.serviceId === serviceId)) return cur;
+      return [...cur, newItem(serviceId)];
     });
     setOrder(null);
-    setPulse((value) => value + 1);
+    setPulse((v) => v + 1);
     scrollToId("raschet");
   }
 
-  function orderFromCalculator(summary: OrderSummary & { size: string }) {
-    setDraft((current) => ({ ...current, size: summary.size || current.size }));
-    setOrder({ lines: summary.lines, total: summary.total });
-    setStatus("form");
-    scrollToId("zayavka");
-    focusNameSoon();
+  function submitCalc() {
+    const lines = items.map((it) => ({
+      name: serviceById(it.serviceId).name.ru,
+      detail: itemDetail(it),
+      total: itemTotal(it),
+    }));
+    const valid = lines.filter((l) => l.total !== null);
+    setOrder({ lines, total: valid.length ? valid.reduce((s, l) => s + (l.total ?? 0), 0) : null });
+    goToForm();
   }
 
   return (
-    <div className="carpet-page page-pad min-h-screen text-fg">
-      <Header onLead={goToForm} />
-      <main>
-        <Hero onLead={goToForm} />
-        <Services onPick={pickService} />
-        <Calculator
-          items={items}
-          pulse={pulse}
-          onUpdate={updateItem}
-          onRemove={removeItem}
-          onAdd={addItem}
-          onOrder={orderFromCalculator}
-        />
-        <Process />
-        <BeforeAfter />
-        <Faq />
-        <Lead
-          draft={draft}
-          status={status}
-          order={order}
-          honey={honey}
-          nameRef={nameRef}
-          onPatch={patch}
-          onHoney={setHoney}
-          onStatus={setStatus}
-          onClearOrder={() => setOrder(null)}
-        />
-      </main>
-      <Footer />
-      <Dock onLead={goToForm} />
+    <LangContext.Provider value={lang}>
+      <div className="page-pad min-h-screen overflow-x-clip text-fg">
+        <Header lang={lang} onLang={switchLang} onLead={goToForm} />
+        <main>
+          <Hero />
+          <Trust />
+          <BeforeAfter />
+          <Reviews />
+          <Services onPick={pickService} />
+          <Calculator
+            items={items}
+            pulse={pulse}
+            onUpdate={updateItem}
+            onRemove={removeItem}
+            onAdd={addItem}
+            onSubmit={submitCalc}
+          />
+          <Kurpacha onPick={() => pickService("kurpacha")} />
+          <Compare />
+          <Steps />
+          <About />
+          <Faq />
+          <Lead order={order} source={source} nameRef={nameRef} onClearOrder={() => setOrder(null)} />
+        </main>
+        <Footer />
+        <Dock onLead={goToForm} />
+      </div>
+    </LangContext.Provider>
+  );
+}
+
+/* ---------- header ---------- */
+
+function LangSwitch({ lang, onLang, dark = false }: { lang: Lang; onLang: (l: Lang) => void; dark?: boolean }) {
+  const options: { id: Lang; label: string }[] = [
+    { id: "tg", label: "TJ" },
+    { id: "ru", label: "RU" },
+  ];
+  return (
+    <div
+      role="group"
+      aria-label="Забон / Язык"
+      className={`flex rounded-full p-1 ${dark ? "bg-white/10" : "bg-bg"}`}
+    >
+      {options.map((o) => {
+        const on = o.id === lang;
+        return (
+          <button
+            key={o.id}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onLang(o.id)}
+            className={`press h-8 min-w-11 rounded-full px-2.5 text-sm font-bold ${focusRing} ${
+              on ? "bg-primary text-white" : dark ? "text-on-navy/80" : "text-muted"
+            }`}
+          >
+            {o.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-function Header({ onLead }: { onLead: () => void }) {
-  const [solid, setSolid] = useState(false);
-
-  useEffect(() => {
-    const onScroll = () => setSolid(window.scrollY > 24);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
+function Header({ lang, onLang, onLead }: { lang: Lang; onLang: (l: Lang) => void; onLead: () => void }) {
+  const tx = useTx();
+  const nav = [
+    { href: "#raznica", label: tx(T.nav.results) },
+    { href: "#uslugi", label: tx(T.nav.services) },
+    { href: "#otzyvy", label: tx(T.nav.reviews) },
+    { href: "#voprosy", label: tx(T.nav.faq) },
+  ];
   return (
-    <header
-      id="top"
-      className={`fixed inset-x-0 top-0 z-40 border-b transition-[background-color,border-color,color,box-shadow] duration-300 ${
-        solid
-          ? "border-line bg-bg/95 text-fg shadow-[0_18px_40px_-32px_rgba(20,33,27,0.6)] backdrop-blur-md"
-          : "border-transparent text-on-ink"
-      }`}
-    >
-      <div className="mx-auto flex h-16 max-w-6xl items-center gap-4 px-5">
-        <a href="#top" className="text-lg font-semibold tracking-tight">
-          Pokizakor<span className="text-primary">.tj</span>
+    <header className="fixed inset-x-0 top-0 z-40 border-b border-line/70 bg-surface/95 backdrop-blur-md">
+      <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 md:h-16 md:px-6">
+        <a href="#top" className={`flex items-center gap-2 rounded-lg ${focusRing}`}>
+          <LogoMark />
+          <span className="text-lg font-extrabold tracking-tight">Покизакор</span>
         </a>
-        <nav className="hidden items-center gap-6 text-base lg:flex">
-          {NAV.map((item) => (
-            <a key={item.href} href={item.href} className="navlink opacity-80 hover:opacity-100">
-              {item.label}
+        <nav className="ml-6 hidden items-center gap-6 text-[15px] font-medium text-muted lg:flex">
+          {nav.map((n) => (
+            <a key={n.href} href={n.href} className="hover:text-fg">
+              {n.label}
             </a>
           ))}
         </nav>
-        <div className="ml-auto flex items-center gap-3">
-          <a href={TEL} className="hidden items-center gap-2 text-base font-medium lg:inline-flex">
-            <Phone className="size-4 text-primary" aria-hidden="true" />
-            <span className="whitespace-nowrap">{PHONE}</span>
+        <div className="ml-auto flex items-center gap-2">
+          <LangSwitch lang={lang} onLang={onLang} />
+          <a
+            href={TEL}
+            aria-label={PHONE}
+            className={`press grid size-10 place-items-center rounded-full bg-primary/10 text-primary md:hidden ${focusRing}`}
+          >
+            <Phone className="size-[18px]" />
           </a>
-          <button type="button" className={btnPrimary} onClick={onLead}>
-            Заявка
+          <a
+            href={TEL}
+            className="hidden items-center gap-2 px-2 text-[15px] font-semibold whitespace-nowrap md:inline-flex"
+          >
+            <Phone className="size-4 text-primary" aria-hidden="true" />
+            {PHONE}
+          </a>
+          <button type="button" onClick={onLead} className={`${btnPrimary} h-11 text-base max-md:hidden`}>
+            {tx(T.lead)}
           </button>
         </div>
       </div>
@@ -490,164 +375,290 @@ function Header({ onLead }: { onLead: () => void }) {
   );
 }
 
-const ROLL = ["ковров.", "одеял.", "курпача.", "диванов.", "кресел."];
+/* ---------- hero ---------- */
 
-function RollingWord() {
-  const [index, setIndex] = useState(0);
-
-  useEffect(() => {
-    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
-    if (motion.matches) return;
-    const timer = window.setInterval(() => {
-      setIndex((value) => (value + 1) % ROLL.length);
-    }, 1400);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  const previous = (index + ROLL.length - 1) % ROLL.length;
-
+function Hero() {
+  const tx = useTx();
+  const lang = useContext(LangContext);
   return (
-    <span className="mt-1 block">
-      <span className="grid h-[1.08em] overflow-hidden">
-        {ROLL.map((word, item) => {
-          const place =
-            item === index
-              ? "translate-y-0 opacity-100"
-              : item === previous
-                ? "-translate-y-full opacity-0"
-                : "translate-y-full opacity-0";
-          return (
-            <span
-              key={word}
-              className={`col-start-1 row-start-1 transition-all duration-300 ease-out motion-reduce:transition-none ${place}`}
-              aria-hidden={item !== index}
-            >
-              {word}
-            </span>
-          );
-        })}
-      </span>
-      <span className="mt-2 block h-1 w-14 rounded-full bg-primary" aria-hidden="true" />
-    </span>
-  );
-}
-
-function Hero({ onLead }: { onLead: () => void }) {
-  return (
-    <section className="relative min-h-svh overflow-hidden">
-      <img
-        src="/photos/hero.jpg"
-        alt="Чистый ковёр в светлой комнате"
-        className="hero-zoom absolute inset-0 h-full w-full object-cover"
-        width={1600}
-        height={900}
-        fetchPriority="high"
-      />
-      <div className="absolute inset-0 bg-gradient-to-r from-ink/80 via-ink/50 to-ink/20" aria-hidden="true" />
-      <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-ink/60 to-transparent" aria-hidden="true" />
-      <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-bg to-transparent" aria-hidden="true" />
-      <div className="relative z-10 mx-auto flex max-w-6xl flex-col px-5 pt-28 pb-14 md:min-h-svh md:justify-center md:pt-24">
-        <Reveal>
-          <p className="text-base font-medium text-on-ink/80">Худжанд</p>
-        </Reveal>
-        <Reveal delay={60}>
-          <h1 className="mt-2 max-w-4xl text-4xl leading-[1.08] font-semibold text-on-ink md:text-5xl lg:text-6xl [text-wrap:normal]">
-            Профессиональная чистка
-            <RollingWord />
-          </h1>
-        </Reveal>
-        <Reveal delay={120}>
-          <p className="mt-3 max-w-md text-lg leading-snug text-on-ink/85">
-            Более 3 лет наводим чистоту в Согде!
+    <section id="top" className="ornament relative bg-navy pt-14 text-on-navy md:pt-16">
+      <div className="mx-auto grid max-w-6xl gap-8 px-4 pt-7 pb-16 md:grid-cols-[1.1fr_0.9fr] md:items-center md:gap-12 md:px-6 md:pt-14 md:pb-24">
+        <div>
+          <p className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-sm font-medium text-on-navy/90">
+            <span className="size-2 rounded-full bg-sun" aria-hidden="true" />
+            {tx(T.hero.place)}
           </p>
-        </Reveal>
-        <Reveal delay={180}>
-          <div className="mt-6 inline-flex w-fit items-end gap-2 rounded-2xl bg-surface px-5 py-3.5 text-fg shadow-card">
-            <p className="pb-2 text-base font-semibold text-muted">от</p>
-            <p className="text-5xl leading-none font-bold tabular-nums">10</p>
-            <p className="pb-1 text-base leading-tight font-medium">
-              сомони
-              <br />
-              за м²
-            </p>
+          <h1 className="mt-4 text-[34px] leading-[1.08] font-extrabold tracking-tight md:text-5xl lg:text-[56px]">
+            {tx(T.hero.title)}
+          </h1>
+          <p className="mt-4 max-w-xl text-[17px] leading-relaxed text-on-navy/80 md:text-lg">{tx(T.hero.sub)}</p>
+
+          <div className="mt-6 grid max-w-md grid-cols-2 gap-2.5">
+            <div className="rounded-2xl bg-white px-4 py-3 text-fg">
+              <p className="flex items-baseline gap-1.5">
+                <span className="text-base font-semibold text-muted">{tx(T.hero.from)}</span>
+                <span className="text-[34px] leading-none font-extrabold tabular-nums">10</span>
+              </p>
+              <p className="mt-1 text-sm leading-tight font-semibold text-muted">{tx(T.hero.perM2)}</p>
+            </div>
+            {OFFER_PERCENT ? (
+              <div className="rounded-2xl bg-sun px-4 py-3 text-navy">
+                <p className="text-[34px] leading-none font-extrabold">−{OFFER_PERCENT}%</p>
+                <p className="mt-1 text-sm leading-tight font-semibold">{tx(T.hero.offer)}</p>
+              </div>
+            ) : null}
           </div>
-        </Reveal>
-        <Reveal delay={240}>
-          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-            <a href="#raschet" className={`${btnPrimary} w-full sm:w-auto`}>
-              Рассчитать
-              <ArrowRight className="size-4" aria-hidden="true" />
+
+          <div className="mt-6 grid gap-3 sm:flex">
+            <a href="#raschet" className={`${btn} bg-white text-navy hover:bg-white/90`}>
+              {tx(T.hero.price)}
+              <ArrowRight className="size-5" aria-hidden="true" />
             </a>
-            <button type="button" className={`${btnOnPhoto} w-full sm:w-auto`} onClick={onLead}>
-              Оставить заявку
-            </button>
+            <a
+              href={waLink(tx(T.wa.hello))}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={btnWa}
+            >
+              <WaIcon />
+              {tx(T.writeWa)}
+            </a>
           </div>
-        </Reveal>
-        <Reveal delay={300}>
-          <ul className="mt-6 flex flex-wrap gap-x-6 gap-y-2.5 text-sm font-medium text-on-ink/75">
-            {WHY.map(({ icon: Icon, text }) => (
-              <li key={text} className="flex items-center gap-2">
-                <Icon className="size-4 shrink-0 text-on-ink/60" aria-hidden="true" />
-                {text}
-              </li>
-            ))}
-          </ul>
-        </Reveal>
+        </div>
+
+        <figure className="relative mx-auto w-full max-w-sm md:max-w-none">
+          <div className="relative overflow-hidden rounded-[28px] bg-navy shadow-[0_30px_60px_-30px_rgba(0,0,0,0.7)] ring-1 ring-white/10">
+            <video
+              className="aspect-[4/5] w-full object-cover"
+              src="/media/wash.mp4"
+              poster="/media/wash-poster.jpg"
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="auto"
+              aria-label={tx(T.hero.video)}
+            />
+            <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-5 pt-12 pb-4 text-base font-semibold text-white">
+              {tx(T.hero.video)}
+            </figcaption>
+          </div>
+          <div className="absolute -bottom-6 -left-2 max-w-[15rem] rounded-2xl bg-white p-3.5 text-fg shadow-card md:-left-8">
+            <p className="text-[15px] leading-snug font-medium">«{lang === "ru" ? REVIEWS[0].ru : REVIEWS[0].short}»</p>
+            <p className="mt-1.5 text-sm text-muted">{REVIEWS[0].name} · Instagram</p>
+          </div>
+        </figure>
       </div>
     </section>
   );
 }
+
+function Trust() {
+  const tx = useTx();
+  return (
+    <div className="relative z-10 mx-auto -mt-6 max-w-6xl px-4 md:-mt-10 md:px-6">
+      <ul className="grid grid-cols-2 gap-px overflow-hidden rounded-3xl border border-line bg-line shadow-card md:grid-cols-4">
+        {T.trust.map((item) => (
+          <li key={item.big.ru} className="bg-surface px-4 py-4 md:px-6 md:py-5">
+            <p className="text-xl font-extrabold text-primary md:text-2xl">{tx(item.big)}</p>
+            <p className="mt-0.5 text-[15px] leading-snug text-muted">{tx(item.small)}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/* ---------- before / after ---------- */
+
+function BeforeAfter() {
+  const tx = useTx();
+  const [caseId, setCaseId] = useState(CASES[0].id);
+  const [after, setAfter] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const seen = useInView(boxRef, 0.55);
+  const item = CASES.find((c) => c.id === caseId) ?? CASES[0];
+
+  // First time the viewer scrolls here, show the dirty photo, then reveal the result.
+  useEffect(() => {
+    if (!seen) return;
+    const timer = window.setTimeout(() => setAfter(true), 900);
+    return () => window.clearTimeout(timer);
+  }, [seen]);
+
+  function choose(id: string) {
+    setCaseId(id);
+    setAfter(false);
+    window.setTimeout(() => setAfter(true), 700);
+  }
+
+  return (
+    <section id="raznica" className="mx-auto max-w-6xl px-4 pt-14 pb-12 md:px-6 md:pt-20 md:pb-16">
+      <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] md:items-center md:gap-12">
+        <div className="min-w-0 md:order-2">
+          <h2 className={h2}>{tx(T.ba.title)}</h2>
+          <p className="mt-2 text-[17px] text-muted">{tx(T.ba.sub)}</p>
+          <ul className="no-scrollbar -mx-4 scroll-px-4 mt-5 flex gap-2 overflow-x-auto px-4 md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0">
+            {CASES.map((c) => {
+              const on = c.id === item.id;
+              return (
+                <li key={c.id} className="shrink-0">
+                  <button
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => choose(c.id)}
+                    className={`press flex w-full items-center gap-2.5 rounded-2xl border p-1.5 pr-4 text-left ${focusRing} ${
+                      on ? "border-primary bg-primary/5" : "border-line bg-surface"
+                    }`}
+                  >
+                    <img src={c.after} alt="" className="size-11 rounded-xl object-cover" width={44} height={44} loading="lazy" />
+                    <span className="text-[15px] font-semibold whitespace-nowrap">{tx(c.name)}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
+        <div ref={boxRef} className="min-w-0 md:order-1">
+          <div className="relative aspect-square overflow-hidden rounded-[28px] bg-line shadow-card">
+            <img
+              key={`${item.id}-b`}
+              src={item.before}
+              alt={`${tx(item.name)}: ${tx(T.ba.before)}`}
+              className="absolute inset-0 size-full object-cover"
+              width={800}
+              height={800}
+              loading="lazy"
+            />
+            <img
+              key={`${item.id}-a`}
+              src={item.after}
+              alt={`${tx(item.name)}: ${tx(T.ba.after)}`}
+              className={`absolute inset-0 size-full object-cover transition-opacity duration-700 ease-out ${
+                after ? "opacity-100" : "opacity-0"
+              }`}
+              width={800}
+              height={800}
+              loading="lazy"
+            />
+            <div className="absolute inset-x-0 bottom-4 flex justify-center">
+              <div role="group" className="flex rounded-full bg-black/55 p-1 backdrop-blur-md">
+                {[false, true].map((isAfter) => (
+                  <button
+                    key={String(isAfter)}
+                    type="button"
+                    aria-pressed={after === isAfter}
+                    onClick={() => setAfter(isAfter)}
+                    className={`press h-11 min-w-24 rounded-full px-5 text-base font-bold ${focusRing} ${
+                      after === isAfter ? (isAfter ? "bg-primary text-white" : "bg-white text-fg") : "text-white/85"
+                    }`}
+                  >
+                    {isAfter ? tx(T.ba.after) : tx(T.ba.before)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ---------- reviews ---------- */
+
+function Reviews() {
+  const tx = useTx();
+  const lang = useContext(LangContext);
+  return (
+    <section id="otzyvy" className="bg-surface py-12 md:py-16">
+      <div className="mx-auto max-w-6xl px-4 md:px-6">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className={h2}>{tx(T.reviews.title)}</h2>
+            <p className="mt-2 text-[17px] text-muted">{tx(T.reviews.sub)}</p>
+          </div>
+          <a
+            href={INSTAGRAM}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-[15px] font-semibold text-primary"
+          >
+            {tx(T.reviews.more)}
+            <ArrowRight className="size-4" aria-hidden="true" />
+          </a>
+        </div>
+        <ul className="no-scrollbar -mx-4 scroll-px-4 mt-6 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 lg:grid-cols-4">
+          {REVIEWS.map((r) => (
+            <li
+              key={r.name}
+              className="flex w-[82%] shrink-0 snap-start flex-col rounded-3xl border border-line bg-bg p-5 md:w-auto"
+            >
+              <div className="flex items-center gap-3">
+                <span className="grid size-10 place-items-center rounded-full bg-primary text-base font-bold text-white">
+                  {r.name[0]}
+                </span>
+                <div>
+                  <p className="text-base font-bold">{r.name}</p>
+                  <p className="text-sm text-muted">Instagram</p>
+                </div>
+              </div>
+              <p className="mt-4 text-[17px] leading-relaxed">{r.text}</p>
+              {lang === "ru" && <p className="mt-2 text-[15px] leading-relaxed text-muted">{r.ru}</p>}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+/* ---------- services ---------- */
 
 function Services({ onPick }: { onPick: (id: string) => void }) {
+  const tx = useTx();
   return (
-    <section id="uslugi" className="mx-auto max-w-6xl px-5 py-10 md:py-16">
-      <Reveal>
-        <p className={kicker}>Услуги и цены</p>
-        <h2 className={`${sectionTitle} mt-2`}>Что чистим</h2>
-        <p className="mt-2 max-w-xl text-base text-muted">
-          Нажмите на услугу — она добавится в расчёт.
-        </p>
-      </Reveal>
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {SERVICES.map((item, index) => (
-          <Reveal key={item.id} delay={index * 60}>
+    <section id="uslugi" className="mx-auto max-w-6xl px-4 pt-12 md:px-6 md:pt-20">
+      <h2 className={h2}>{tx(T.services.title)}</h2>
+      <p className="mt-2 text-[17px] text-muted">{tx(T.services.sub)}</p>
+      <ul className="mt-6 grid gap-2.5 md:grid-cols-2">
+        {SERVICES.map((s) => (
+          <li key={s.id}>
             <button
               type="button"
-              onClick={() => onPick(item.id)}
-              className="press group relative block w-full overflow-hidden rounded-2xl text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              onClick={() => onPick(s.id)}
+              className={`press group flex w-full items-center gap-3.5 rounded-3xl border border-line bg-surface p-2.5 pr-3 text-left hover:border-primary/40 ${focusRing}`}
             >
               <img
-                src={item.photo}
-                alt={item.photoAlt}
-                className="aspect-[4/3] w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04]"
-                width={1200}
-                height={900}
+                src={s.photo}
+                alt=""
+                className="size-[72px] shrink-0 rounded-2xl object-cover"
+                width={72}
+                height={72}
                 loading="lazy"
               />
-              <span
-                className="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/30 to-ink/5"
-                aria-hidden="true"
-              />
-              <span className="absolute top-3 right-3 rounded-full bg-surface/95 px-3 py-1 text-sm font-semibold tabular-nums shadow-card">
-                {item.price} <span className="font-medium text-muted">{item.hint}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-lg leading-tight font-bold">{tx(s.name)}</span>
+                <span className="mt-0.5 block text-[15px] leading-snug text-muted">{tx(s.note)}</span>
               </span>
-              <span className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-5 text-on-ink">
-                <span className="min-w-0">
-                  <span className="block text-2xl leading-tight font-semibold">{item.name}</span>
-                  <span className="mt-1 block text-sm font-medium text-on-ink/75">{item.note}</span>
-                </span>
-                <span className="flex h-9 shrink-0 translate-y-1 items-center gap-1 rounded-full bg-primary px-3.5 text-sm font-semibold text-primary-fg opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100">
-                  <Plus className="size-3.5" aria-hidden="true" />
-                  Добавить
-                </span>
+              <span className="shrink-0 text-right">
+                <span className="block text-xl leading-none font-extrabold tabular-nums">{s.price}</span>
+                <span className="mt-1 block text-[13px] text-muted">{tx(s.per)}</span>
+              </span>
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white">
+                <Plus className="size-5" aria-hidden="true" />
+                <span className="sr-only">{tx(T.services.add)}</span>
               </span>
             </button>
-          </Reveal>
+          </li>
         ))}
-      </div>
+      </ul>
     </section>
   );
 }
+
+/* ---------- calculator ---------- */
 
 function Calculator({
   items,
@@ -655,21 +666,20 @@ function Calculator({
   onUpdate,
   onRemove,
   onAdd,
-  onOrder,
+  onSubmit,
 }: {
   items: CalcItem[];
   pulse: number;
-  onUpdate: (id: string, partial: Partial<CalcItem>) => void;
+  onUpdate: (id: string, patch: Partial<CalcItem>) => void;
   onRemove: (id: string) => void;
-  onAdd: (serviceId?: string) => void;
-  onOrder: (summary: OrderSummary & { size: string }) => void;
+  onAdd: () => void;
+  onSubmit: () => void;
 }) {
+  const tx = useTx();
   const [flash, setFlash] = useState(false);
   const totals = items.map(itemTotal);
-  const valid = totals.some((total) => total !== null);
-  const grandTotal = valid ? totals.reduce<number>((sum, total) => sum + (total ?? 0), 0) : null;
-  const hasInvalid = totals.some((total) => total === null);
-  const shownTotal = useCountUp(grandTotal);
+  const known = totals.filter((t): t is number => t !== null);
+  const total = known.length ? known.reduce((a, b) => a + b, 0) : null;
 
   useEffect(() => {
     if (!pulse) return;
@@ -678,716 +688,720 @@ function Calculator({
     return () => window.clearTimeout(timer);
   }, [pulse]);
 
-  function submitOrder() {
-    const lines: OrderLine[] = items.map((item) => ({
-      name: serviceById(item.serviceId).name,
-      detail: itemDetail(item),
-      total: itemTotal(item),
-    }));
-    const sum = lines.reduce((acc, line) => acc + (line.total ?? 0), 0);
-    const anyValid = lines.some((line) => line.total !== null);
-    onOrder({
-      lines,
-      total: anyValid ? sum : null,
-      size: lines.length === 1 ? lines[0].detail : "",
-    });
-  }
-
   return (
-    <section id="raschet">
-      <div className="mx-auto grid max-w-6xl gap-6 px-5 py-10 md:py-16 lg:grid-cols-12">
-        <Reveal className="min-w-0 lg:col-span-4">
-          <p className={kicker}>Калькулятор</p>
-          <h2 className={`${sectionTitle} mt-2`}>Сколько выйдет</h2>
-          <p className="mt-2 max-w-xs text-base leading-relaxed text-muted">
-            Добавьте позиции — стоимость посчитается сразу.
+    <section id="raschet" className="mx-auto max-w-6xl px-4 pt-12 pb-12 md:px-6 md:pt-16 md:pb-20">
+      <div
+        className={`rounded-[28px] border border-line bg-surface p-4 shadow-card md:grid md:grid-cols-[0.8fr_1.2fr] md:gap-10 md:p-8 ${
+          flash ? "flash" : ""
+        }`}
+      >
+        <div className="px-1 pt-1 md:px-0">
+          <h2 className={h2}>{tx(T.calc.title)}</h2>
+          <p className="mt-2 text-[17px] text-muted">{tx(T.calc.sub)}</p>
+          <p className="mt-4 hidden rounded-2xl bg-bg p-4 text-[15px] leading-relaxed text-muted md:block">
+            {tx(T.calc.noSize)}
           </p>
-          <ul className="mt-5 space-y-1.5 text-base text-muted">
-            {["Вывоз и доставка по Худжанду", "От 15 м² — бесплатно", "Оплата после чистки"].map((item) => (
-              <li key={item} className="flex items-center gap-2">
-                <Check className="size-4 shrink-0 text-primary" aria-hidden="true" />
-                {item}
-              </li>
-            ))}
-          </ul>
-        </Reveal>
-        <Reveal delay={80} className="min-w-0 lg:col-span-8">
-          <div
-            className={`rounded-2xl border border-line bg-surface p-5 shadow-card md:p-7 ${flash ? "flash" : ""}`}
-          >
-            <p className="text-base font-medium">Что чистим</p>
-            <ul className="mt-3 space-y-3">
-              {items.map((item, index) => {
-                const service = serviceById(item.serviceId);
-                const total = itemTotal(item);
-                const len = parseMeters(item.length);
-                const wid = parseMeters(item.width);
-                const area = len && wid ? len * wid : null;
-                return (
-                  <li key={item.id} className="rounded-xl border border-line bg-bg p-4">
-                    <div className="flex items-center gap-2.5">
-                      {items.length > 1 && (
-                        <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-                          {index + 1}
-                        </span>
-                      )}
-                      <div className="relative min-w-0 flex-1">
-                        <select
-                          {...calm}
-                          aria-label="Услуга"
-                          className={`${fieldClass} appearance-none pr-10`}
-                          value={item.serviceId}
-                          onChange={(event) => onUpdate(item.id, { serviceId: event.target.value })}
-                        >
-                          {SERVICES.map((entry) => (
-                            <option key={entry.id} value={entry.id}>
-                              {entry.name} — {entry.price} {entry.hint}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted" />
-                      </div>
-                      {items.length > 1 && (
+        </div>
+
+        <div className="mt-5 md:mt-0">
+          <ul className="space-y-3">
+            {items.map((item, index) => {
+              const s = serviceById(item.serviceId);
+              const t = totals[index];
+              const presetIndex = item.custom ? -1 : SIZES.findIndex((p) => p.l === item.l && p.w === item.w);
+              return (
+                <li key={item.id} className="rounded-3xl bg-bg p-3.5">
+                  <div className="flex items-center gap-2">
+                    <div className="relative min-w-0 flex-1">
+                      <select
+                        {...calm}
+                        aria-label={tx(T.calc.service)}
+                        className={`${field} appearance-none pr-10 font-semibold`}
+                        value={item.serviceId}
+                        onChange={(e) => onUpdate(item.id, { serviceId: e.target.value })}
+                      >
+                        {SERVICES.map((opt) => (
+                          <option key={opt.id} value={opt.id}>
+                            {tx(opt.name)} — {opt.price}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute top-1/2 right-3.5 size-5 -translate-y-1/2 text-muted" />
+                    </div>
+                    {items.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => onRemove(item.id)}
+                        aria-label={tx(T.calc.remove)}
+                        className={`press grid size-13 shrink-0 place-items-center rounded-2xl border border-line bg-surface text-muted hover:text-bad ${focusRing}`}
+                      >
+                        <X className="size-5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {s.unit === "m2" ? (
+                    <div className="mt-3">
+                      <p className="text-sm font-semibold text-muted">{tx(T.calc.size)}</p>
+                      <div className="mt-2 grid grid-cols-5 gap-1.5">
+                        {SIZES.map((p, pi) => (
+                          <button
+                            key={`${p.l}x${p.w}`}
+                            type="button"
+                            aria-pressed={presetIndex === pi}
+                            onClick={() => onUpdate(item.id, { l: p.l, w: p.w, custom: false })}
+                            className={`press h-11 rounded-xl text-[15px] font-semibold tabular-nums ${focusRing} ${
+                              presetIndex === pi
+                                ? "bg-primary text-white"
+                                : "border border-line bg-surface text-fg hover:border-primary/40"
+                            }`}
+                          >
+                            {p.l.replace(".", ",")}×{p.w.replace(".", ",")}
+                          </button>
+                        ))}
                         <button
                           type="button"
-                          onClick={() => onRemove(item.id)}
-                          aria-label="Убрать позицию"
-                          className="press grid size-11 shrink-0 place-items-center rounded-xl border border-line bg-surface text-muted hover:border-primary/40 hover:text-primary"
+                          aria-pressed={presetIndex === -1}
+                          onClick={() => onUpdate(item.id, { custom: true })}
+                          className={`press h-11 rounded-xl text-[15px] font-semibold ${focusRing} ${
+                            presetIndex === -1
+                              ? "bg-primary text-white"
+                              : "border border-line bg-surface text-fg hover:border-primary/40"
+                          }`}
                         >
-                          <X className="size-4" />
+                          {tx(T.calc.own)}
                         </button>
-                      )}
-                    </div>
-                    <div className="mt-3">
-                      {service.unit === "m2" ? (
-                        <div className="grid grid-cols-2 gap-3">
-                          <label className="block text-base font-medium">
-                            Длина, м
+                      </div>
+                      {presetIndex === -1 && (
+                        <div className="mt-3 grid grid-cols-2 gap-2.5">
+                          <label className="block text-sm font-semibold text-muted">
+                            {tx(T.calc.length)}
                             <input
                               {...calm}
-                              className={`${fieldClass} mt-1.5`}
+                              className={`${field} mt-1`}
                               inputMode="decimal"
-                              value={item.length}
-                              onChange={(event) => onUpdate(item.id, { length: event.target.value })}
+                              value={item.l}
+                              onChange={(e) => onUpdate(item.id, { l: e.target.value, custom: true })}
                             />
                           </label>
-                          <label className="block text-base font-medium">
-                            Ширина, м
+                          <label className="block text-sm font-semibold text-muted">
+                            {tx(T.calc.width)}
                             <input
                               {...calm}
-                              className={`${fieldClass} mt-1.5`}
+                              className={`${field} mt-1`}
                               inputMode="decimal"
-                              value={item.width}
-                              onChange={(event) => onUpdate(item.id, { width: event.target.value })}
+                              value={item.w}
+                              onChange={(e) => onUpdate(item.id, { w: e.target.value, custom: true })}
                             />
                           </label>
                         </div>
-                      ) : (
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="text-base text-muted">{service.qtyLabel ?? "Сколько?"}</p>
-                          <div className="flex items-center gap-2.5">
-                            <button
-                              type="button"
-                              className="press inline-flex size-11 items-center justify-center rounded-xl border border-line bg-surface hover:border-fg/25 disabled:cursor-not-allowed disabled:opacity-40"
-                              onClick={() => onUpdate(item.id, { qty: Math.max(1, item.qty - 1) })}
-                              disabled={item.qty <= 1}
-                              aria-label="Меньше"
-                            >
-                              <Minus className="size-4" />
-                            </button>
-                            <span className="w-10 text-center text-3xl font-bold tabular-nums">{item.qty}</span>
-                            <button
-                              type="button"
-                              className="press inline-flex size-11 items-center justify-center rounded-xl border border-line bg-surface hover:border-fg/25 disabled:cursor-not-allowed disabled:opacity-40"
-                              onClick={() => onUpdate(item.id, { qty: Math.min(12, item.qty + 1) })}
-                              disabled={item.qty >= 12}
-                              aria-label="Больше"
-                            >
-                              <Plus className="size-4" />
-                            </button>
-                          </div>
-                        </div>
                       )}
                     </div>
-                    <p className="mt-2.5 flex items-center justify-between gap-3 text-base">
-                      <span className="min-w-0 text-muted">
-                        {service.unit === "m2"
-                          ? area
-                            ? `${formatNumber(area)} м² × ${service.price} сомони`
-                            : "Впишите размер"
-                          : `${item.qty} × ${service.price} сомони`}
-                      </span>
-                      <span className="shrink-0 font-semibold tabular-nums">
-                        {total === null ? "—" : `${somoni(total)} сомони`}
-                      </span>
-                    </p>
-                  </li>
-                );
-              })}
-            </ul>
-            <button
-              type="button"
-              onClick={() => onAdd()}
-              className="press mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-line text-base font-medium text-muted hover:border-primary/50 hover:text-primary"
-            >
-              <Plus className="size-4" aria-hidden="true" />
-              Добавить ещё
-            </button>
+                  ) : (
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <p className="text-base font-semibold text-muted">{s.qty ? tx(s.qty) : tx(T.calc.howMany)}</p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          aria-label={tx(T.calc.less)}
+                          disabled={item.qty <= 1}
+                          onClick={() => onUpdate(item.id, { qty: Math.max(1, item.qty - 1) })}
+                          className={`press grid size-12 place-items-center rounded-2xl border border-line bg-surface disabled:opacity-40 ${focusRing}`}
+                        >
+                          <Minus className="size-5" />
+                        </button>
+                        <span className="w-10 text-center text-2xl font-extrabold tabular-nums">{item.qty}</span>
+                        <button
+                          type="button"
+                          aria-label={tx(T.calc.more)}
+                          disabled={item.qty >= 20}
+                          onClick={() => onUpdate(item.id, { qty: Math.min(20, item.qty + 1) })}
+                          className={`press grid size-12 place-items-center rounded-2xl border border-line bg-surface disabled:opacity-40 ${focusRing}`}
+                        >
+                          <Plus className="size-5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
-            <div className="mt-5 flex items-end justify-between gap-4 border-t border-line pt-5">
-              <div>
-                <p className="text-base text-muted">Ориентир</p>
-                {hasInvalid && (
-                  <p className="mt-1 max-w-[16rem] text-sm text-muted">
-                    Впишите размер, чтобы учесть все позиции.
+                  <p className="mt-3 flex items-baseline justify-between gap-3 text-[15px]">
+                    <span className="text-muted">
+                      {s.unit === "m2"
+                        ? t === null
+                          ? tx(T.calc.enterSize)
+                          : `${fmt(t / s.price, 1)} м² × ${s.price}`
+                        : `${item.qty} × ${s.price}`}
+                    </span>
+                    <span className="font-bold tabular-nums">{t === null ? "—" : `${fmt(t)} ${tx(T.somoni)}`}</span>
                   </p>
-                )}
-              </div>
-              <p className="text-right text-4xl leading-none font-bold tabular-nums">
-                {shownTotal === null ? "—" : somoni(shownTotal)}
-                {shownTotal !== null && <span className="ml-1.5 text-base font-medium text-muted">сомони</span>}
-              </p>
-            </div>
-            <button type="button" className={`${btnPrimary} mt-5 w-full`} onClick={submitOrder}>
-              {grandTotal === null ? (
-                "Оформить заявку"
-              ) : (
-                <>
-                  Оформить заявку · {somoni(grandTotal)} сомони
-                  <ArrowRight className="size-4" aria-hidden="true" />
-                </>
-              )}
-            </button>
-          </div>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
-function Process() {
-  return (
-    <section id="kak" className="mx-auto max-w-6xl px-5 py-10 md:py-16">
-      <Reveal>
-        <p className={kicker}>Процесс</p>
-        <h2 className={`${sectionTitle} mt-2`}>Как проходит</h2>
-        <p className="mt-2 max-w-xl text-base text-muted">От заявки до чистого ковра — четыре шага.</p>
-      </Reveal>
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {STEPS.map((step, index) => {
-          const Icon = step.icon;
-          return (
-            <Reveal key={step.n} delay={index * 70}>
-              <div className="h-full rounded-2xl border border-line bg-surface p-5">
-                <div className="flex items-center justify-between">
-                  <span className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary">
-                    <Icon className="size-5" aria-hidden="true" />
-                  </span>
-                  <span className="text-sm font-semibold text-muted">{step.n}</span>
-                </div>
-                <p className="mt-3 text-xl font-semibold">{step.title}</p>
-                <p className="mt-1 text-base leading-relaxed text-muted">{step.text}</p>
-              </div>
-            </Reveal>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-const CASES = [
-  { id: "rug", name: "Ковёр", before: "/photos/ba/rug-before.jpg", after: "/photos/ba/rug-after.jpg" },
-  { id: "light", name: "Светлый ковёр", before: "/photos/ba/light-before.jpg", after: "/photos/ba/light-after.jpg" },
-  { id: "sofa", name: "Диван", before: "/photos/ba/sofa-before.jpg", after: "/photos/ba/sofa-after.jpg" },
-  { id: "corner", name: "Угловой диван", before: "/photos/ba/corner-before.jpg", after: "/photos/ba/corner-after.jpg" },
-  { id: "chairs", name: "Стулья", before: "/photos/ba/chairs-before.jpg", after: "/photos/ba/chairs-after.jpg" },
-];
-
-function BeforeAfter() {
-  const [id, setId] = useState(CASES[0].id);
-  const item = CASES.find((entry) => entry.id === id) ?? CASES[0];
-
-  return (
-    <section className="mx-auto max-w-6xl px-5 py-10 md:py-16" aria-labelledby="before-title">
-      <Reveal>
-        <p className={kicker}>Результаты</p>
-        <h2 id="before-title" className={`${sectionTitle} mt-2`}>
-          До и после
-        </h2>
-        <p className="mt-2 max-w-xl text-base text-muted">
-          Фото с наших заказов: слева — до чистки, справа — после.
-        </p>
-      </Reveal>
-      <Reveal delay={80} className="mt-6">
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
-          <div key={item.id} className="case-in overflow-hidden rounded-2xl border border-line shadow-card">
-            <div className="grid sm:grid-cols-2">
-              <figure className="relative m-0">
-                <img
-                  src={item.before}
-                  alt={`${item.name}: до чистки`}
-                  className="aspect-[4/3] w-full object-cover transition-transform duration-500 ease-out hover:scale-[1.03]"
-                  width={1200}
-                  height={900}
-                  loading="lazy"
-                />
-                <figcaption className="absolute top-3 left-3 rounded-full bg-ink/75 px-3 py-1 text-sm font-medium text-on-ink">
-                  До
-                </figcaption>
-              </figure>
-              <figure className="relative m-0 border-t border-line sm:border-t-0 sm:border-l">
-                <img
-                  src={item.after}
-                  alt={`${item.name}: после чистки`}
-                  className="aspect-[4/3] w-full object-cover transition-transform duration-500 ease-out hover:scale-[1.03]"
-                  width={1200}
-                  height={900}
-                  loading="lazy"
-                />
-                <figcaption className="absolute top-3 right-3 rounded-full bg-primary px-3 py-1 text-sm font-medium text-primary-fg">
-                  После
-                </figcaption>
-              </figure>
-            </div>
-          </div>
-          <ul className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
-            {CASES.map((entry) => {
-              const on = entry.id === item.id;
-              return (
-                <li key={entry.id} className="shrink-0 lg:shrink">
-                  <button
-                    type="button"
-                    onClick={() => setId(entry.id)}
-                    aria-pressed={on}
-                    className={`press flex items-center gap-3 rounded-xl border bg-surface py-2 pr-4 pl-2 text-left ${
-                      on ? "border-primary bg-primary/5" : "border-line hover:border-fg/25"
-                    }`}
-                  >
-                    <img
-                      src={entry.after}
-                      alt=""
-                      className="size-14 rounded-lg object-cover"
-                      width={56}
-                      height={56}
-                      loading="lazy"
-                    />
-                    <span className="text-base font-medium">{entry.name}</span>
-                  </button>
                 </li>
               );
             })}
           </ul>
+
+          <button
+            type="button"
+            onClick={onAdd}
+            className={`press mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-line text-base font-semibold text-muted hover:border-primary/50 hover:text-primary ${focusRing}`}
+          >
+            <Plus className="size-5" aria-hidden="true" />
+            {tx(T.calc.add)}
+          </button>
+
+          <p className="mt-4 rounded-2xl bg-bg p-3.5 text-[15px] leading-snug text-muted md:hidden">{tx(T.calc.noSize)}</p>
+
+          <div className="mt-5 flex items-end justify-between gap-4 border-t border-line pt-5">
+            <div>
+              <p className="text-base text-muted">{tx(T.calc.total)}</p>
+              {OFFER_PERCENT && total !== null ? (
+                <p className="mt-1 text-sm font-semibold text-primary">
+                  {fmt(withOffer(total))} {tx(T.somoni)} {tx(T.calc.withOffer)}
+                </p>
+              ) : null}
+            </div>
+            <p className="text-right text-4xl leading-none font-extrabold tabular-nums">
+              {total === null ? "—" : fmt(total)}
+              {total !== null && <span className="ml-1.5 text-base font-semibold text-muted">{tx(T.somoni)}</span>}
+            </p>
+          </div>
+          <button type="button" onClick={onSubmit} className={`${btnPrimary} mt-5 w-full`}>
+            {tx(T.calc.order)}
+            <ArrowRight className="size-5" aria-hidden="true" />
+          </button>
         </div>
-      </Reveal>
+      </div>
     </section>
   );
 }
 
-function Faq() {
+/* ---------- kurpacha ---------- */
+
+function Kurpacha({ onPick }: { onPick: () => void }) {
+  const tx = useTx();
   return (
-    <section id="voprosy" className="mx-auto max-w-6xl px-5 py-10 md:py-16">
-      <Reveal>
-        <p className={kicker}>Вопросы</p>
-        <h2 className={`${sectionTitle} mt-2`}>Частые вопросы</h2>
-      </Reveal>
-      <Reveal delay={80}>
-        <Accordion.Root
-          type="single"
-          collapsible
-          className="mt-6 rounded-2xl border border-line bg-surface px-5 md:px-7"
-        >
-          {FAQ.map((item) => (
-            <Accordion.Item key={item.q} value={item.q} className="border-b border-line last:border-b-0">
-              <Accordion.Header>
-                <Accordion.Trigger className="group flex w-full items-center justify-between gap-4 py-4 text-left text-lg font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
-                  {item.q}
-                  <ChevronDown
-                    className="size-5 shrink-0 text-muted transition-transform duration-200 group-data-[state=open]:rotate-180"
-                    aria-hidden="true"
-                  />
-                </Accordion.Trigger>
-              </Accordion.Header>
-              <Accordion.Content className="acc-content">
-                <div className="pb-4 text-base leading-relaxed text-muted">{item.a}</div>
-              </Accordion.Content>
-            </Accordion.Item>
-          ))}
-        </Accordion.Root>
-      </Reveal>
+    <section className="ornament bg-navy text-on-navy">
+      <div className="mx-auto grid max-w-6xl gap-6 px-4 py-12 md:grid-cols-2 md:items-center md:gap-12 md:px-6 md:py-16">
+        <div className="grid grid-cols-2 gap-2.5">
+          <img
+            src="/media/kurpacha-dry.jpg"
+            alt=""
+            className="aspect-[3/4] w-full rounded-3xl object-cover"
+            width={400}
+            height={533}
+            loading="lazy"
+          />
+          <img
+            src="/media/kurpacha.jpg"
+            alt=""
+            className="mt-8 aspect-[3/4] w-full rounded-3xl object-cover"
+            width={400}
+            height={533}
+            loading="lazy"
+          />
+        </div>
+        <div>
+          <h2 className={h2}>{tx(T.kurpacha.title)}</h2>
+          <p className="mt-3 text-[17px] leading-relaxed text-on-navy/80">{tx(T.kurpacha.text)}</p>
+          <p className="mt-5 inline-flex rounded-2xl bg-white/10 px-4 py-2.5 text-xl font-extrabold">
+            {tx(T.kurpacha.price)}
+          </p>
+          <div className="mt-6">
+            <button type="button" onClick={onPick} className={`${btn} w-full bg-white text-navy hover:bg-white/90 sm:w-auto`}>
+              <Plus className="size-5" aria-hidden="true" />
+              {tx(T.kurpacha.cta)}
+            </button>
+          </div>
+        </div>
+      </div>
     </section>
+  );
+}
+
+/* ---------- compare ---------- */
+
+function Compare() {
+  const tx = useTx();
+  return (
+    <section className="mx-auto max-w-6xl px-4 py-12 md:px-6 md:py-20">
+      <h2 className={h2}>{tx(T.compare.title)}</h2>
+      <div className="mt-6 overflow-hidden rounded-[28px] border border-line bg-surface">
+        <div className="grid grid-cols-2 border-b border-line text-[15px] font-bold md:text-base">
+          <p className="px-4 py-3.5 text-muted md:px-6">{tx(T.compare.self)}</p>
+          <p className="flex items-center gap-2 bg-primary/5 px-4 py-3.5 text-primary md:px-6">
+            <LogoMark className="size-5" />
+            {tx(T.compare.us)}
+          </p>
+        </div>
+        <ul>
+          {T.compare.rows.map((row) => (
+            <li key={row.us.ru} className="grid grid-cols-2 border-b border-line last:border-b-0">
+              <p className="flex gap-2 px-4 py-4 text-[15px] leading-snug text-muted md:px-6 md:text-base">
+                <X className="mt-0.5 size-4 shrink-0 text-bad" aria-hidden="true" />
+                {tx(row.self)}
+              </p>
+              <p className="flex gap-2 bg-primary/5 px-4 py-4 text-[15px] leading-snug font-semibold md:px-6 md:text-base">
+                <Check className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+                {tx(row.us)}
+              </p>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+/* ---------- steps ---------- */
+
+function Steps() {
+  const tx = useTx();
+  return (
+    <section className="bg-surface py-12 md:py-20">
+      <div className="mx-auto max-w-6xl px-4 md:px-6">
+        <h2 className={h2}>{tx(T.steps.title)}</h2>
+        <ol className="no-scrollbar -mx-4 scroll-px-4 mt-6 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:grid-cols-4 md:overflow-visible md:px-0">
+          {T.steps.items.map((step, i) => (
+            <li key={step.title.ru} className="w-[78%] shrink-0 snap-start md:w-auto">
+              <div className="relative overflow-hidden rounded-3xl">
+                <img
+                  src={step.photo}
+                  alt=""
+                  className="aspect-[4/3] w-full object-cover"
+                  width={600}
+                  height={450}
+                  loading="lazy"
+                />
+                <span className="absolute top-3 left-3 grid size-9 place-items-center rounded-full bg-white text-base font-extrabold text-primary shadow-card">
+                  {i + 1}
+                </span>
+              </div>
+              <p className="mt-3 text-xl font-bold">{tx(step.title)}</p>
+              <p className="mt-1 text-[15px] leading-relaxed text-muted">{tx(step.text)}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
+/* ---------- about ---------- */
+
+function About() {
+  const tx = useTx();
+  return (
+    <section className="mx-auto max-w-6xl px-4 py-12 md:px-6 md:py-20">
+      <div className="grid gap-6 md:grid-cols-2 md:items-center md:gap-12">
+        <img
+          src="/media/team.jpg"
+          alt={tx(T.about.title)}
+          className="aspect-[4/3] w-full rounded-[28px] object-cover shadow-card"
+          width={1200}
+          height={900}
+          loading="lazy"
+        />
+        <div>
+          <h2 className={h2}>{tx(T.about.title)}</h2>
+          <p className="mt-3 text-[17px] leading-relaxed text-muted">{tx(T.about.text)}</p>
+          <div className="mt-5 grid grid-cols-2 gap-2.5">
+            <img src="/media/foam.jpg" alt="" className="aspect-[4/3] w-full rounded-2xl object-cover" width={500} height={375} loading="lazy" />
+            <img src="/media/red-full.jpg" alt="" className="aspect-[4/3] w-full rounded-2xl object-cover" width={500} height={375} loading="lazy" />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ---------- faq ---------- */
+
+function Faq() {
+  const tx = useTx();
+  return (
+    <section id="voprosy" className="mx-auto max-w-3xl px-4 pb-14 md:px-6 md:pb-20">
+      <h2 className={h2}>{tx(T.faq.title)}</h2>
+      <Accordion.Root type="single" collapsible className="mt-6 rounded-[28px] border border-line bg-surface px-4 md:px-6">
+        {T.faq.items.map((item) => (
+          <Accordion.Item key={item.q.ru} value={item.q.ru} className="border-b border-line last:border-b-0">
+            <Accordion.Header>
+              <Accordion.Trigger
+                className={`group flex min-h-14 w-full items-center justify-between gap-4 py-4 text-left text-[17px] font-semibold ${focusRing}`}
+              >
+                {tx(item.q)}
+                <ChevronDown
+                  className="size-5 shrink-0 text-muted transition-transform duration-200 group-data-[state=open]:rotate-180"
+                  aria-hidden="true"
+                />
+              </Accordion.Trigger>
+            </Accordion.Header>
+            <Accordion.Content className="acc-content">
+              <p className="pb-4 text-base leading-relaxed text-muted">{tx(item.a)}</p>
+            </Accordion.Content>
+          </Accordion.Item>
+        ))}
+      </Accordion.Root>
+    </section>
+  );
+}
+
+/* ---------- lead form ---------- */
+
+function OrderBox({ order, onEdit }: { order: Order; onEdit?: () => void }) {
+  const tx = useTx();
+  return (
+    <div className="rounded-2xl border border-primary/25 bg-primary/5 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-bold text-primary">{tx(T.form.yourCalc)}</p>
+        {onEdit && (
+          <button
+            type="button"
+            onClick={onEdit}
+            className={`press rounded-xl border border-line bg-surface px-3 py-1.5 text-sm font-semibold ${focusRing}`}
+          >
+            {tx(T.form.edit)}
+          </button>
+        )}
+      </div>
+      <ul className="mt-2 space-y-1 text-[15px]">
+        {order.lines.map((line, i) => (
+          <li key={i} className="flex justify-between gap-3">
+            <span className="min-w-0">
+              {line.name}
+              {line.detail ? ` · ${line.detail}` : ""}
+            </span>
+            <span className="shrink-0 font-semibold tabular-nums">
+              {line.total === null ? "—" : `${fmt(line.total)} ${tx(T.somoni)}`}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {order.total !== null && (
+        <p className="mt-2 flex justify-between gap-3 border-t border-primary/20 pt-2 text-base font-bold">
+          <span>{tx(T.form.total)}</span>
+          <span className="tabular-nums">
+            ≈ {fmt(order.total)} {tx(T.somoni)}
+          </span>
+        </p>
+      )}
+    </div>
   );
 }
 
 function Lead({
-  draft,
-  status,
   order,
-  honey,
+  source,
   nameRef,
-  onPatch,
-  onHoney,
-  onStatus,
   onClearOrder,
 }: {
-  draft: Draft;
-  status: "form" | "sent";
-  order: OrderSummary | null;
-  honey: string;
+  order: Order | null;
+  source: string;
   nameRef: RefObject<HTMLInputElement | null>;
-  onPatch: (partial: Partial<Draft>) => void;
-  onHoney: (value: string) => void;
-  onStatus: (status: "form" | "sent") => void;
   onClearOrder: () => void;
 }) {
-  const [errors, setErrors] = useState<{ name?: string; phone?: string }>({});
-  const service = serviceById(draft.service);
-  const hasOrder = Boolean(order && order.lines.length > 0);
+  const tx = useTx();
+  const lang = useContext(LangContext);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [when, setWhen] = useState(WHENS[0].id);
+  const [comment, setComment] = useState("");
+  const [showComment, setShowComment] = useState(false);
+  const [honey, setHoney] = useState("");
+  const [errors, setErrors] = useState<{ name?: boolean; phone?: boolean }>({});
+  const [status, setStatus] = useState<"form" | "sending" | "sent" | "failed" | "wa">("form");
 
-  function onSubmit(event: FormEvent) {
-    event.preventDefault();
-    const next: { name?: string; phone?: string } = {};
-    if (draft.name.trim().length < 2) next.name = "Как к вам обращаться?";
-    if (phoneDigits(draft.phone).length < 9) next.phone = "Впишите номер телефона";
-    setErrors(next);
-    if (Object.keys(next).length > 0) return;
-    if (honey) {
-      onStatus("sent");
-      return;
+  const whenEntry = WHENS.find((w) => w.id === when) ?? WHENS[0];
+  const hasOrder = Boolean(order && order.lines.length);
+  const offerText = OFFER_PERCENT ? `−${OFFER_PERCENT}% на первый заказ с сайта` : "";
+
+  function waText() {
+    const lines = [
+      tx(T.wa.hello),
+      `${tx(T.wa.name)}: ${name.trim()}`,
+      `${tx(T.form.phone)}: +992 ${phone}`,
+      `${tx(T.wa.when)}: ${whenEntry[lang]}`,
+    ];
+    if (order) {
+      for (const line of order.lines) {
+        lines.push(`• ${line.name}${line.detail ? ` (${line.detail})` : ""}`);
+      }
+      if (order.total !== null) lines.push(`≈ ${fmt(order.total)} ${tx(T.somoni)}`);
     }
-    onStatus("sent");
+    if (comment.trim()) lines.push(comment.trim());
+    return lines.join("\n");
   }
 
-  const recap: Array<{ label: string; value: string }> = [
-    { label: "Имя", value: draft.name.trim() },
-    { label: "Телефон", value: draft.phone.trim() },
-  ];
-  if (!hasOrder) {
-    recap.push({ label: "Услуга", value: service.name });
-    if (draft.size.trim()) recap.push({ label: "Размер", value: draft.size.trim() });
+  async function onSubmit(event: FormEvent) {
+    event.preventDefault();
+    const next = { name: name.trim().length < 2, phone: phoneDigits(phone).length < 9 };
+    setErrors(next);
+    if (next.name || next.phone) return;
+    setStatus("sending");
+    try {
+      const result = await sendLead({
+        data: {
+          name: name.trim(),
+          phone: `+992 ${phone}`,
+          when: whenEntry.ru,
+          comment: comment.trim(),
+          items: order?.lines ?? [],
+          total: order?.total ?? null,
+          offer: offerText,
+          lang,
+          source,
+          website: honey,
+        },
+      });
+      setStatus(result.ok ? "sent" : result.reason === "not_configured" ? "wa" : "failed");
+    } catch {
+      setStatus("failed");
+    }
   }
-  if (draft.district) recap.push({ label: "Район", value: draft.district });
-  recap.push({ label: "Когда", value: draft.when });
-  if (draft.comment.trim()) recap.push({ label: "Комментарий", value: draft.comment.trim() });
 
   return (
-    <section id="zayavka" className="relative overflow-hidden bg-ink text-on-ink">
-      <div
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(620px_320px_at_18%_0%,rgba(194,75,40,0.18),transparent_70%)]"
-        aria-hidden="true"
-      />
-      <div className="relative mx-auto grid max-w-6xl gap-8 px-5 py-12 md:grid-cols-12 md:py-16">
-        <Reveal className="min-w-0 md:col-span-5">
-          <p className={kicker}>Заявка</p>
-          <h2 className={`${sectionTitle} mt-2 text-on-ink`}>Оставить заявку</h2>
-          <p className="mt-3 max-w-sm text-base leading-relaxed text-on-ink/75">
-            Заполните форму — перезвоним и подтвердим время. Или позвоните сами:
-          </p>
-          <a
-            href={TEL}
-            className="press mt-5 inline-flex h-12 items-center gap-2 rounded-xl border border-on-ink/30 px-5 text-base font-medium text-on-ink hover:bg-on-ink/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-on-ink"
-          >
-            <Phone className="size-4" aria-hidden="true" />
-            {PHONE}
-          </a>
-          <p className="mt-2.5 text-sm text-on-ink/60">Ежедневно 8:00–20:00 · Худжанд и Согд</p>
-        </Reveal>
-        <Reveal delay={80} className="min-w-0 md:col-span-7">
-          <div className="rounded-2xl bg-surface p-5 text-fg md:p-7">
-            {status === "sent" ? (
-              <div className="pop-in">
-                <div className="flex items-center gap-4">
-                  <span className="grid size-14 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
-                    <svg viewBox="0 0 52 52" fill="none" className="size-8" aria-hidden="true">
-                      <circle
-                        className="check-circle"
-                        cx="26"
-                        cy="26"
-                        r="24"
-                        stroke="currentColor"
-                        strokeWidth="3"
-                      />
-                      <path
-                        className="check-path"
-                        d="M16 27l7 7 14-15"
-                        stroke="currentColor"
-                        strokeWidth="3.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </span>
-                  <div>
-                    <p className="text-2xl font-semibold">Заявка принята</p>
-                    <p className="mt-1 text-base text-muted">Перезвоним и подтвердим время.</p>
-                  </div>
+    <section id="zayavka" className="ornament bg-navy text-on-navy">
+      <div className="mx-auto grid max-w-6xl gap-8 px-4 py-12 md:grid-cols-[0.8fr_1.2fr] md:gap-12 md:px-6 md:py-20">
+        <div>
+          <h2 className={h2}>{tx(T.form.title)}</h2>
+          <p className="mt-3 text-[17px] leading-relaxed text-on-navy/80">{tx(T.form.sub)}</p>
+          {OFFER_PERCENT ? (
+            <p className="mt-5 inline-flex items-center gap-3 rounded-2xl bg-sun px-4 py-3 text-navy">
+              <span className="text-2xl font-extrabold">−{OFFER_PERCENT}%</span>
+              <span className="text-sm leading-tight font-semibold">{tx(T.hero.offer)}</span>
+            </p>
+          ) : null}
+          <div className="mt-6 hidden gap-3 md:grid">
+            <a href={TEL} className={`${btn} border border-white/25 text-on-navy hover:bg-white/10`}>
+              <Phone className="size-5" aria-hidden="true" />
+              {PHONE}
+            </a>
+          </div>
+        </div>
+
+        <div className="rounded-[28px] bg-surface p-4 text-fg md:p-7">
+          {status === "sent" ? (
+            <div className="pop-in py-2">
+              <span className="grid size-14 place-items-center rounded-full bg-primary/10 text-primary">
+                <Check className="size-8" aria-hidden="true" />
+              </span>
+              <p className="mt-4 text-2xl font-extrabold">{tx(T.form.okTitle)}</p>
+              <p className="mt-1 text-[17px] text-muted">{tx(T.form.okText)}</p>
+              {order && hasOrder && (
+                <div className="mt-5">
+                  <OrderBox order={order} />
                 </div>
-                <dl className="mt-5 space-y-2 rounded-xl border border-line bg-bg p-4 text-base">
-                  {recap.map((row) => (
-                    <div key={row.label} className="flex justify-between gap-4">
-                      <dt className="shrink-0 text-muted">{row.label}</dt>
-                      <dd className="text-right font-medium">{row.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-                {order && order.lines.length > 0 && (
-                  <div className="mt-3 rounded-xl border border-line bg-bg p-4">
-                    <p className="text-sm font-semibold text-primary">Расчёт из калькулятора</p>
-                    <ul className="mt-2 space-y-1 text-base">
-                      {order.lines.map((line, index) => (
-                        <li key={index} className="flex justify-between gap-3">
-                          <span className="min-w-0">
-                            {line.name}
-                            {line.detail ? ` · ${line.detail}` : ""}
-                          </span>
-                          <span className="shrink-0 font-medium tabular-nums">
-                            {line.total === null ? "—" : `${somoni(line.total)} сомони`}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                    {order.total !== null && (
-                      <p className="mt-2 flex justify-between gap-3 border-t border-line pt-2 text-base font-semibold">
-                        <span>Итого</span>
-                        <span className="tabular-nums">{somoni(order.total)} сомони</span>
-                      </p>
-                    )}
-                  </div>
-                )}
-                <button type="button" className={`${btnGhost} mt-5`} onClick={() => onStatus("form")}>
-                  Изменить заявку
+              )}
+              <button
+                type="button"
+                onClick={() => setStatus("form")}
+                className={`${btn} mt-5 border border-line text-fg hover:border-fg/30`}
+              >
+                {tx(T.form.edit)}
+              </button>
+            </div>
+          ) : status === "failed" || status === "wa" ? (
+            <div className="pop-in py-2">
+              <p className="text-2xl font-extrabold">{status === "wa" ? tx(T.form.waTitle) : tx(T.form.failTitle)}</p>
+              <p className="mt-1 text-[17px] text-muted">{status === "wa" ? tx(T.form.waText) : tx(T.form.failText)}</p>
+              <div className="mt-5 grid gap-3">
+                <a href={waLink(waText())} target="_blank" rel="noopener noreferrer" className={btnWa}>
+                  <WaIcon />
+                  {tx(T.form.sendWa)}
+                </a>
+                <a href={TEL} className={`${btn} border border-line text-fg`}>
+                  <Phone className="size-5 text-primary" aria-hidden="true" />
+                  {PHONE}
+                </a>
+                <button type="button" onClick={() => setStatus("form")} className="h-11 text-base font-semibold text-muted">
+                  {tx(T.form.back)}
                 </button>
               </div>
-            ) : (
-              <form onSubmit={onSubmit} noValidate>
-                <div className="hidden" aria-hidden="true">
-                  <label>
-                    Сайт
-                    <input
-                      {...calm}
-                      tabIndex={-1}
-                      autoComplete="off"
-                      value={honey}
-                      onChange={(event) => onHoney(event.target.value)}
-                    />
-                  </label>
+            </div>
+          ) : (
+            <form onSubmit={onSubmit} noValidate>
+              <div className="hidden" aria-hidden="true">
+                <label>
+                  Website
+                  <input {...calm} tabIndex={-1} autoComplete="off" value={honey} onChange={(e) => setHoney(e.target.value)} />
+                </label>
+              </div>
+
+              {order && hasOrder && (
+                <div className="mb-4">
+                  <OrderBox
+                    order={order}
+                    onEdit={() => {
+                      onClearOrder();
+                      scrollToId("raschet");
+                    }}
+                  />
                 </div>
-                {order && order.lines.length > 0 && (
-                  <div className="mb-4 rounded-xl border border-primary/30 bg-primary/5 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="text-sm font-semibold text-primary">Расчёт из калькулятора</p>
-                      <button
-                        type="button"
-                        className="press shrink-0 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium hover:border-fg/25"
-                        onClick={() => scrollToId("raschet")}
-                      >
-                        Изменить
-                      </button>
-                    </div>
-                    <ul className="mt-2 space-y-1 text-base">
-                      {order.lines.map((line, index) => (
-                        <li key={index} className="flex justify-between gap-3">
-                          <span className="min-w-0">
-                            {line.name}
-                            {line.detail ? ` · ${line.detail}` : ""}
-                          </span>
-                          <span className="shrink-0 font-medium tabular-nums">
-                            {line.total === null ? "—" : `${somoni(line.total)} сомони`}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                    {order.lines.length > 1 && order.total !== null && (
-                      <p className="mt-2 flex justify-between gap-3 border-t border-primary/20 pt-2 text-base font-semibold">
-                        <span>Итого</span>
-                        <span className="tabular-nums">{somoni(order.total)} сомони</span>
-                      </p>
-                    )}
-                  </div>
-                )}
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="block text-base font-medium">
-                    Имя
+              )}
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block text-base font-semibold">
+                  {tx(T.form.name)}
+                  <input
+                    {...calm}
+                    ref={nameRef}
+                    autoComplete="name"
+                    className={`${field} mt-1.5 ${errors.name ? "border-bad" : ""}`}
+                    value={name}
+                    aria-invalid={errors.name || undefined}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      if (errors.name) setErrors((p) => ({ ...p, name: false }));
+                    }}
+                  />
+                  {errors.name && <span className="mt-1 block text-sm font-medium text-bad">{tx(T.form.errName)}</span>}
+                </label>
+                <label className="block text-base font-semibold">
+                  {tx(T.form.phone)}
+                  <span className="relative mt-1.5 block">
+                    <span className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-[17px] font-medium text-muted">
+                      +992
+                    </span>
                     <input
                       {...calm}
-                      id="lead-name"
-                      ref={nameRef}
-                      className={`${fieldClass} mt-1.5 ${errors.name ? "border-primary" : ""}`}
-                      autoComplete="name"
-                      value={draft.name}
-                      onChange={(event) => {
-                        onPatch({ name: event.target.value });
-                        if (errors.name) setErrors((prev) => ({ ...prev, name: undefined }));
-                      }}
-                    />
-                    {errors.name && <span className="mt-1 block text-sm text-primary">{errors.name}</span>}
-                  </label>
-                  <label className="block text-base font-medium">
-                    Телефон
-                    <input
-                      {...calm}
-                      className={`${fieldClass} mt-1.5 ${errors.phone ? "border-primary" : ""}`}
+                      type="tel"
                       inputMode="tel"
-                      autoComplete="tel"
+                      autoComplete="tel-national"
                       placeholder="92 123 45 67"
-                      value={draft.phone}
-                      onChange={(event) => {
-                        onPatch({ phone: formatPhoneInput(event.target.value) });
-                        if (errors.phone) setErrors((prev) => ({ ...prev, phone: undefined }));
+                      className={`${field} pl-16 tabular-nums ${errors.phone ? "border-bad" : ""}`}
+                      value={phone}
+                      aria-invalid={errors.phone || undefined}
+                      onChange={(e) => {
+                        setPhone(formatPhone(e.target.value));
+                        if (errors.phone) setErrors((p) => ({ ...p, phone: false }));
                       }}
                     />
-                    {errors.phone && <span className="mt-1 block text-sm text-primary">{errors.phone}</span>}
-                  </label>
-                </div>
-                {!hasOrder && (
-                  <label className="mt-4 block text-base font-medium">
-                    Услуга
-                    <div className="relative mt-1.5">
-                      <select
-                        {...calm}
-                        className={`${fieldClass} appearance-none pr-10`}
-                        value={draft.service}
-                        onChange={(event) => {
-                          onPatch({ service: event.target.value });
-                          onClearOrder();
-                        }}
+                  </span>
+                  {errors.phone && <span className="mt-1 block text-sm font-medium text-bad">{tx(T.form.errPhone)}</span>}
+                </label>
+              </div>
+
+              <fieldset className="mt-4">
+                <legend className="text-base font-semibold">{tx(T.form.when)}</legend>
+                <div className="mt-1.5 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                  {WHENS.map((w) => {
+                    const on = w.id === when;
+                    return (
+                      <button
+                        key={w.id}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => setWhen(w.id)}
+                        className={`press h-12 rounded-2xl px-4 text-base font-semibold ${focusRing} ${
+                          on ? "bg-navy text-white" : "border border-line bg-bg text-fg hover:border-fg/25"
+                        }`}
                       >
-                        {SERVICES.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.name} — {item.price} {item.hint}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted" />
-                    </div>
-                  </label>
-                )}
-                <div className={hasOrder ? "mt-4" : "mt-4 grid gap-4 sm:grid-cols-2"}>
-                  {!hasOrder && (
-                    <label className="block text-base font-medium">
-                      Размер
-                      <input
-                        {...calm}
-                        className={`${fieldClass} mt-1.5`}
-                        placeholder="2 × 3 м"
-                        value={draft.size}
-                        onChange={(event) => {
-                          onPatch({ size: event.target.value });
-                          onClearOrder();
-                        }}
-                      />
-                    </label>
-                  )}
-                  <label className="block text-base font-medium">
-                    Район
-                    <div className="relative mt-1.5">
-                      <select
-                        {...calm}
-                        className={`${fieldClass} appearance-none pr-10`}
-                        value={draft.district}
-                        onChange={(event) => onPatch({ district: event.target.value })}
-                      >
-                        <option value="">Не указан</option>
-                        {DISTRICTS.map((district) => (
-                          <option key={district} value={district}>
-                            {district}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted" />
-                    </div>
-                  </label>
+                        {w[lang]}
+                      </button>
+                    );
+                  })}
                 </div>
-                <fieldset className="mt-4">
-                  <legend className="text-base font-medium">Когда забрать</legend>
-                  <div className="mt-1.5 flex flex-wrap gap-2">
-                    {WHENS.map((when) => {
-                      const on = draft.when === when;
-                      return (
-                        <button
-                          key={when}
-                          type="button"
-                          onClick={() => onPatch({ when })}
-                          className={`press h-12 rounded-full px-4 text-base font-medium ${
-                            on ? "bg-ink text-on-ink" : "border border-line bg-bg text-fg hover:border-fg/25"
-                          }`}
-                        >
-                          {when}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </fieldset>
-                <label className="mt-4 block text-base font-medium">
-                  Комментарий
+              </fieldset>
+
+              {showComment ? (
+                <label className="mt-4 block text-base font-semibold">
+                  {tx(T.form.comment)}
                   <textarea
                     {...calm}
-                    className={`${fieldClass} mt-1.5 h-auto min-h-24 py-3`}
-                    placeholder="Пятна, животные, подъезд"
-                    value={draft.comment}
-                    onChange={(event) => onPatch({ comment: event.target.value })}
+                    autoFocus
+                    className={`${field} mt-1.5 h-auto min-h-24 py-3`}
+                    placeholder={tx(T.form.commentHint)}
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
                   />
                 </label>
-                <button type="submit" className={`${btnPrimary} mt-4 w-full`}>
-                  Отправить заявку
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowComment(true)}
+                  className="mt-3 inline-flex h-11 items-center gap-1.5 text-base font-semibold text-primary"
+                >
+                  <Plus className="size-4" aria-hidden="true" />
+                  {tx(T.form.addComment)}
                 </button>
-              </form>
-            )}
-          </div>
-        </Reveal>
+              )}
+
+              <button type="submit" disabled={status === "sending"} className={`${btnPrimary} mt-4 w-full disabled:opacity-70`}>
+                {status === "sending" ? tx(T.form.sending) : tx(T.form.submit)}
+              </button>
+
+              <div className="mt-4 flex items-center gap-3 text-sm text-muted">
+                <span className="h-px flex-1 bg-line" />
+                {tx(T.form.or)}
+                <span className="h-px flex-1 bg-line" />
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2.5">
+                <a href={waLink(tx(T.wa.hello))} target="_blank" rel="noopener noreferrer" className={`${btnWa} px-3`}>
+                  <WaIcon />
+                  WhatsApp
+                </a>
+                <a href={TEL} className={`${btn} border border-line px-3 text-fg`}>
+                  <Phone className="size-5 text-primary" aria-hidden="true" />
+                  {tx(T.call)}
+                </a>
+              </div>
+            </form>
+          )}
+        </div>
       </div>
     </section>
   );
 }
 
+/* ---------- footer & dock ---------- */
+
 function Footer() {
+  const tx = useTx();
   return (
-    <footer className="border-t border-line">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-8 md:flex-row md:items-start md:justify-between">
-        <div className="max-w-xs">
-          <p className="text-xl font-semibold">
-            Pokizakor<span className="text-primary">.tj</span>
+    <footer className="bg-navy text-on-navy/80">
+      <div className="mx-auto flex max-w-6xl flex-col gap-5 border-t border-white/10 px-4 py-8 md:flex-row md:items-center md:justify-between md:px-6">
+        <div>
+          <p className="flex items-center gap-2 text-lg font-extrabold text-white">
+            <LogoMark className="size-7" />
+            Покизакор
           </p>
-          <p className="mt-1.5 text-base text-muted">
-            Стирка и химчистка ковров, диванов и ковролина в Худжанде.
-          </p>
+          <p className="mt-1.5 text-[15px]">{tx(T.footer.about)}</p>
         </div>
-        <nav className="flex flex-col gap-1.5 text-base" aria-label="Разделы">
-          {NAV.map((item) => (
-            <a key={item.href} href={item.href} className="w-fit text-muted hover:text-fg">
-              {item.label}
-            </a>
-          ))}
-        </nav>
-        <div className="flex flex-col items-start gap-1.5">
-          <a href={TEL} className="text-lg font-semibold">
+        <div className="flex flex-col gap-1 md:items-end">
+          <a href={TEL} className="text-lg font-bold text-white">
             {PHONE}
           </a>
-          <p className="text-base text-muted">Ежедневно 8:00–20:00</p>
+          <p className="text-[15px]">{tx(T.footer.hours)}</p>
+          <a href={INSTAGRAM} target="_blank" rel="noopener noreferrer" className="text-[15px] font-semibold text-white">
+            Instagram @pokizakor
+          </a>
         </div>
       </div>
-      <p className="mx-auto max-w-6xl px-5 pb-6 text-sm text-muted">© Pokizakor.tj — чистые ковры в Худжанде</p>
     </footer>
   );
 }
 
 function Dock({ onLead }: { onLead: () => void }) {
+  const tx = useTx();
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 md:hidden">
-      <div className="dock pointer-events-auto mx-auto flex max-w-md items-center gap-3 px-4 pt-3">
+    <div className="dock fixed inset-x-0 bottom-0 z-50 border-t border-line bg-surface/95 px-3 pt-2.5 backdrop-blur-md md:hidden">
+      <div className="mx-auto flex max-w-md items-center gap-2">
         <a
           href={TEL}
-          className="press inline-flex h-14 flex-1 items-center justify-center gap-2 rounded-full border border-line bg-surface/95 text-base font-medium shadow-card backdrop-blur-md"
+          aria-label={tx(T.call)}
+          className={`press grid size-13 shrink-0 place-items-center rounded-2xl border border-line text-primary ${focusRing}`}
         >
-          <Phone className="size-5 text-primary" aria-hidden="true" />
-          Позвонить
+          <Phone className="size-5" />
         </a>
-        <button
-          type="button"
-          onClick={onLead}
-          className="press inline-flex h-14 flex-1 items-center justify-center gap-2 rounded-full bg-primary text-base font-medium text-primary-fg shadow-card"
+        <a
+          href={waLink(tx(T.wa.hello))}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`${btnWa} flex-1 px-3 text-base`}
         >
-          Заявка
+          <WaIcon />
+          WhatsApp
+        </a>
+        <button type="button" onClick={onLead} className={`${btnPrimary} flex-1 px-3 text-base`}>
+          {tx(T.lead)}
         </button>
       </div>
     </div>
