@@ -138,19 +138,20 @@ function WaIcon({ className = "size-5" }: { className?: string }) {
   );
 }
 
-function LogoMark({ className = "size-8" }: { className?: string }) {
+function LogoMark({ className = "size-9 text-primary" }: { className?: string }) {
   return (
-    <svg viewBox="0 0 40 40" className={className} aria-hidden="true">
-      <circle cx="20" cy="20" r="20" fill="#1f55c4" />
-      <path
-        d="M20 7l3.8 9.2L33 20l-9.2 3.8L20 33l-3.8-9.2L7 20l9.2-3.8z"
-        fill="none"
-        stroke="#fff"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-      <circle cx="20" cy="20" r="3.2" fill="#f4b63a" />
-    </svg>
+    <span
+      aria-hidden="true"
+      className={`inline-block shrink-0 bg-current ${className}`}
+      style={{
+        maskImage: "url(/media/logo-mask.png)",
+        WebkitMaskImage: "url(/media/logo-mask.png)",
+        maskSize: "contain",
+        WebkitMaskSize: "contain",
+        maskRepeat: "no-repeat",
+        WebkitMaskRepeat: "no-repeat",
+      }}
+    />
   );
 }
 
@@ -341,7 +342,7 @@ function Header({ lang, onLang, onLead }: { lang: Lang; onLang: (l: Lang) => voi
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 md:h-16 md:px-6">
         <a href="#top" className={`flex items-center gap-2 rounded-lg ${focusRing}`}>
           <LogoMark />
-          <span className="text-lg font-extrabold tracking-tight">Покизакор</span>
+          <span className="text-[19px] font-extrabold tracking-tight text-primary uppercase">Покизакор</span>
         </a>
         <nav className="ml-6 hidden items-center gap-6 text-[15px] font-medium text-muted lg:flex">
           {nav.map((n) => (
@@ -381,8 +382,20 @@ function Hero() {
   const tx = useTx();
   const lang = useContext(LangContext);
   return (
-    <section id="top" className="ornament relative bg-navy pt-14 text-on-navy md:pt-16">
-      <div className="mx-auto grid max-w-6xl gap-8 px-4 pt-7 pb-16 md:grid-cols-[1.1fr_0.9fr] md:items-center md:gap-12 md:px-6 md:pt-14 md:pb-24">
+    <section id="top" className="ornament relative overflow-hidden bg-navy pt-14 text-on-navy md:pt-16">
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute -top-10 -right-40 size-[30rem] bg-white opacity-[0.06] md:top-6 md:-left-48 md:size-[40rem]"
+        style={{
+          maskImage: "url(/media/logo-mask-lg.png)",
+          WebkitMaskImage: "url(/media/logo-mask-lg.png)",
+          maskSize: "contain",
+          WebkitMaskSize: "contain",
+          maskRepeat: "no-repeat",
+          WebkitMaskRepeat: "no-repeat",
+        }}
+      />
+      <div className="relative mx-auto grid max-w-6xl gap-8 px-4 pt-7 pb-16 md:grid-cols-[1.1fr_0.9fr] md:items-center md:gap-12 md:px-6 md:pt-14 md:pb-24">
         <div>
           <p className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-sm font-medium text-on-navy/90">
             <span className="size-2 rounded-full bg-sun" aria-hidden="true" />
@@ -928,7 +941,7 @@ function Compare() {
         <div className="grid grid-cols-2 border-b border-line text-[15px] font-bold md:text-base">
           <p className="px-4 py-3.5 text-muted md:px-6">{tx(T.compare.self)}</p>
           <p className="flex items-center gap-2 bg-primary/5 px-4 py-3.5 text-primary md:px-6">
-            <LogoMark className="size-5" />
+            <LogoMark className="size-5 text-primary" />
             {tx(T.compare.us)}
           </p>
         </div>
@@ -1360,7 +1373,7 @@ function Footer() {
       <div className="mx-auto flex max-w-6xl flex-col gap-5 border-t border-white/10 px-4 py-8 md:flex-row md:items-center md:justify-between md:px-6">
         <div>
           <p className="flex items-center gap-2 text-lg font-extrabold text-white">
-            <LogoMark className="size-7" />
+            <LogoMark className="size-8 text-white" />
             Покизакор
           </p>
           <p className="mt-1.5 text-[15px]">{tx(T.footer.about)}</p>

@@ -16,10 +16,10 @@ export const Route = createRootRoute({
         content:
           "Стирка ковров, курпача, одеял и химчистка диванов в Худжанде. Заберём и привезём за 1–3 дня, оплата после чистки. От 10 сомони за м².",
       },
-      { name: "theme-color", content: "#0b1d42" },
+      { name: "theme-color", content: "#0d2740" },
     ],
     links: [
-      { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+      { rel: "icon", type: "image/png", href: "/favicon.png" },
       { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: "/__grok/manifest.webmanifest" },
       { rel: "apple-touch-icon", href: "/__grok/icon-180.png" },

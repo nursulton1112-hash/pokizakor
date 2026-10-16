@@ -4,20 +4,20 @@
   --font-sans: "Golos Text", "Segoe UI", sans-serif;
 
   --color-bg: #f3f5f9;
-  --color-fg: #0e1a33;
+  --color-fg: #10202f;
   --color-muted: #4a5672;
   --color-surface: #ffffff;
   --color-line: #dde3ee;
-  --color-primary: #1f55c4;
-  --color-primary-dark: #163f95;
+  --color-primary: #2b689c;
+  --color-primary-dark: #20507a;
   --color-primary-fg: #ffffff;
-  --color-navy: #0b1d42;
+  --color-navy: #0d2740;
   --color-on-navy: #f2f5fb;
-  --color-sun: #f4b63a;
+  --color-sun: #f2884b;
   --color-wa: #15803d;
   --color-bad: #b4352c;
 
-  --shadow-card: 0 18px 40px -26px rgb(11 29 66 / 0.45);
+  --shadow-card: 0 18px 40px -26px rgb(13 39 64 / 0.45);
 }
 
 @layer base {
@@ -153,10 +153,10 @@
 
 @keyframes flash-ring {
   0% {
-    box-shadow: 0 0 0 0 rgb(31 85 196 / 0.35);
+    box-shadow: 0 0 0 0 rgb(43 104 156 / 0.35);
   }
   100% {
-    box-shadow: 0 0 0 16px rgb(31 85 196 / 0);
+    box-shadow: 0 0 0 16px rgb(43 104 156 / 0);
   }
 }
 
