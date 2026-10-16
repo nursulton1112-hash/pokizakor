@@ -1042,6 +1042,7 @@ function Lead({
 }) {
   const [errors, setErrors] = useState<{ name?: string; phone?: string }>({});
   const service = serviceById(draft.service);
+  const hasOrder = Boolean(order && order.lines.length > 0);
 
   function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -1060,9 +1061,11 @@ function Lead({
   const recap: Array<{ label: string; value: string }> = [
     { label: "Имя", value: draft.name.trim() },
     { label: "Телефон", value: draft.phone.trim() },
-    { label: "Услуга", value: service.name },
   ];
-  if (draft.size.trim()) recap.push({ label: "Размер", value: draft.size.trim() });
+  if (!hasOrder) {
+    recap.push({ label: "Услуга", value: service.name });
+    if (draft.size.trim()) recap.push({ label: "Размер", value: draft.size.trim() });
+  }
   if (draft.district) recap.push({ label: "Район", value: draft.district });
   recap.push({ label: "Когда", value: draft.when });
   if (draft.comment.trim()) recap.push({ label: "Комментарий", value: draft.comment.trim() });
@@ -1236,41 +1239,45 @@ function Lead({
                     {errors.phone && <span className="mt-1 block text-sm text-primary">{errors.phone}</span>}
                   </label>
                 </div>
-                <label className="mt-4 block text-base font-medium">
-                  Услуга
-                  <div className="relative mt-1.5">
-                    <select
-                      {...calm}
-                      className={`${fieldClass} appearance-none pr-10`}
-                      value={draft.service}
-                      onChange={(event) => {
-                        onPatch({ service: event.target.value });
-                        onClearOrder();
-                      }}
-                    >
-                      {SERVICES.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name} — {item.price} {item.hint}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted" />
-                  </div>
-                </label>
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <label className="block text-base font-medium">
-                    Размер
-                    <input
-                      {...calm}
-                      className={`${fieldClass} mt-1.5`}
-                      placeholder="2 × 3 м"
-                      value={draft.size}
-                      onChange={(event) => {
-                        onPatch({ size: event.target.value });
-                        onClearOrder();
-                      }}
-                    />
+                {!hasOrder && (
+                  <label className="mt-4 block text-base font-medium">
+                    Услуга
+                    <div className="relative mt-1.5">
+                      <select
+                        {...calm}
+                        className={`${fieldClass} appearance-none pr-10`}
+                        value={draft.service}
+                        onChange={(event) => {
+                          onPatch({ service: event.target.value });
+                          onClearOrder();
+                        }}
+                      >
+                        {SERVICES.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name} — {item.price} {item.hint}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted" />
+                    </div>
                   </label>
+                )}
+                <div className={hasOrder ? "mt-4" : "mt-4 grid gap-4 sm:grid-cols-2"}>
+                  {!hasOrder && (
+                    <label className="block text-base font-medium">
+                      Размер
+                      <input
+                        {...calm}
+                        className={`${fieldClass} mt-1.5`}
+                        placeholder="2 × 3 м"
+                        value={draft.size}
+                        onChange={(event) => {
+                          onPatch({ size: event.target.value });
+                          onClearOrder();
+                        }}
+                      />
+                    </label>
+                  )}
                   <label className="block text-base font-medium">
                     Район
                     <div className="relative mt-1.5">
