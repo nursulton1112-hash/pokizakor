@@ -10,6 +10,7 @@ import {
 import * as Accordion from "@radix-ui/react-accordion";
 import { ArrowRight, Check, ChevronDown, Minus, Phone, Plus, X } from "lucide-react";
 import { sendLead } from "@/lib/lead";
+import { initPixel, track } from "@/lib/pixel";
 import {
   CASES,
   INSTAGRAM,
@@ -198,6 +199,19 @@ export function HomePage() {
   }, []);
 
   useEffect(() => {
+    initPixel();
+    // One listener covers every call / WhatsApp link on the page.
+    function onClick(event: MouseEvent) {
+      const link = (event.target as Element | null)?.closest?.("a");
+      const href = link?.getAttribute("href") ?? "";
+      if (href.startsWith("tel:")) track("Contact", { method: "phone" });
+      else if (href.startsWith("https://wa.me/")) track("Contact", { method: "whatsapp" });
+    }
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
+  }, []);
+
+  useEffect(() => {
     document.documentElement.lang = lang === "tg" ? "tg" : "ru";
   }, [lang]);
 
@@ -260,6 +274,8 @@ export function HomePage() {
       total: itemTotal(it),
     }));
     const valid = lines.filter((l) => l.total !== null);
+    const sum = valid.reduce((s, l) => s + (l.total ?? 0), 0);
+    track("InitiateCheckout", { value: Math.round(sum), currency: "TJS", num_items: lines.length });
     setOrder({ lines, total: valid.length ? valid.reduce((s, l) => s + (l.total ?? 0), 0) : null });
     goToForm();
   }
@@ -1165,6 +1181,9 @@ function Lead({
         },
       });
       setStatus(result.ok ? "sent" : result.reason === "not_configured" ? "wa" : "failed");
+      if (result.ok) {
+        track("Lead", { value: Math.round(order?.total ?? 0), currency: "TJS", content_name: "site_form" });
+      }
     } catch {
       setStatus("failed");
     }
