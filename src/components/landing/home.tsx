@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Sparkles,
   Truck,
+  X,
 } from "lucide-react";
 
 const PHONE = "+992 92 000 00 00";
@@ -140,13 +141,6 @@ const WHY = [
   { icon: MapPin, text: "Худжанд и районы Согда" },
 ];
 
-const PRESETS = [
-  { label: "1,5 × 2", length: "1,5", width: "2" },
-  { label: "2 × 3", length: "2", width: "3" },
-  { label: "2,5 × 3,5", length: "2,5", width: "3,5" },
-  { label: "3 × 4", length: "3", width: "4" },
-];
-
 type Draft = {
   name: string;
   phone: string;
@@ -167,11 +161,18 @@ const INITIAL_DRAFT: Draft = {
   comment: "",
 };
 
-type OrderSummary = {
+type CalcItem = {
+  id: string;
   serviceId: string;
-  size: string;
-  total: number | null;
+  length: string;
+  width: string;
+  qty: number;
 };
+
+type OrderLine = { name: string; detail: string; total: number | null };
+type OrderSummary = { lines: OrderLine[]; total: number | null };
+
+const INITIAL_ITEM: CalcItem = { id: "item-1", serviceId: "wash", length: "2", width: "3", qty: 1 };
 
 function serviceById(id: string) {
   return SERVICES.find((item) => item.id === id) ?? SERVICES[0];
@@ -203,6 +204,36 @@ function formatPhoneInput(value: string) {
   if (!digits) return "";
   const parts = [digits.slice(0, 2), digits.slice(2, 5), digits.slice(5, 7), digits.slice(7, 9)].filter(Boolean);
   return `+992 ${parts.join(" ")}`;
+}
+
+function itemTotal(item: CalcItem): number | null {
+  const service = serviceById(item.serviceId);
+  if (service.unit === "m2") {
+    const len = parseMeters(item.length);
+    const wid = parseMeters(item.width);
+    if (!len || !wid) return null;
+    return len * wid * service.price;
+  }
+  return item.qty * service.price;
+}
+
+function itemDetail(item: CalcItem): string {
+  const service = serviceById(item.serviceId);
+  if (service.unit === "m2") {
+    const len = parseMeters(item.length);
+    const wid = parseMeters(item.width);
+    return len && wid ? `${formatNumber(len)} × ${formatNumber(wid)} м` : "";
+  }
+  return `${item.qty} шт.`;
+}
+
+function isPristine(item: CalcItem) {
+  return (
+    item.serviceId === INITIAL_ITEM.serviceId &&
+    item.length === INITIAL_ITEM.length &&
+    item.width === INITIAL_ITEM.width &&
+    item.qty === INITIAL_ITEM.qty
+  );
 }
 
 function scrollToId(id: string) {
@@ -313,9 +344,11 @@ function useCountUp(target: number | null) {
 export function HomePage() {
   const [draft, setDraft] = useState<Draft>(INITIAL_DRAFT);
   const [status, setStatus] = useState<"form" | "sent">("form");
+  const [items, setItems] = useState<CalcItem[]>([INITIAL_ITEM]);
   const [order, setOrder] = useState<OrderSummary | null>(null);
   const [pulse, setPulse] = useState(0);
   const [honey, setHoney] = useState("");
+  const itemSeq = useRef(1);
   const nameRef = useRef<HTMLInputElement>(null);
 
   function patch(partial: Partial<Draft>) {
@@ -332,20 +365,47 @@ export function HomePage() {
     focusNameSoon();
   }
 
-  function changeService(id: string) {
-    patch({ service: id });
+  function addItem(serviceId?: string) {
+    setItems((current) => {
+      const service = serviceId ?? current[current.length - 1]?.serviceId ?? SERVICES[0].id;
+      itemSeq.current += 1;
+      return [
+        ...current,
+        { id: `item-${itemSeq.current}`, serviceId: service, length: "2", width: "3", qty: 1 },
+      ];
+    });
+    setOrder(null);
+  }
+
+  function updateItem(id: string, partial: Partial<CalcItem>) {
+    setItems((current) => current.map((item) => (item.id === id ? { ...item, ...partial } : item)));
+    setOrder(null);
+  }
+
+  function removeItem(id: string) {
+    setItems((current) => (current.length > 1 ? current.filter((item) => item.id !== id) : current));
     setOrder(null);
   }
 
   function pickService(id: string) {
-    changeService(id);
+    setItems((current) => {
+      if (current.length === 1 && isPristine(current[0])) {
+        return [{ ...current[0], serviceId: id }];
+      }
+      itemSeq.current += 1;
+      return [
+        ...current,
+        { id: `item-${itemSeq.current}`, serviceId: id, length: "2", width: "3", qty: 1 },
+      ];
+    });
+    setOrder(null);
     setPulse((value) => value + 1);
     scrollToId("raschet");
   }
 
-  function orderFromCalculator(size: string, total: number | null) {
-    setDraft((current) => ({ ...current, size: size || current.size }));
-    setOrder({ serviceId: draft.service, size, total });
+  function orderFromCalculator(summary: OrderSummary & { size: string }) {
+    setDraft((current) => ({ ...current, size: summary.size || current.size }));
+    setOrder({ lines: summary.lines, total: summary.total });
     setStatus("form");
     scrollToId("zayavka");
     focusNameSoon();
@@ -358,9 +418,11 @@ export function HomePage() {
         <Hero onLead={goToForm} />
         <Services onPick={pickService} />
         <Calculator
-          serviceId={draft.service}
+          items={items}
           pulse={pulse}
-          onService={changeService}
+          onUpdate={updateItem}
+          onRemove={removeItem}
+          onAdd={addItem}
           onOrder={orderFromCalculator}
         />
         <Process />
@@ -375,7 +437,6 @@ export function HomePage() {
           onPatch={patch}
           onHoney={setHoney}
           onStatus={setStatus}
-          onService={changeService}
           onClearOrder={() => setOrder(null)}
         />
       </main>
@@ -466,7 +527,7 @@ function RollingWord() {
           );
         })}
       </span>
-      <span className="mt-3 block h-1 w-14 rounded-full bg-primary" aria-hidden="true" />
+      <span className="mt-2 block h-1 w-14 rounded-full bg-primary" aria-hidden="true" />
     </span>
   );
 }
@@ -485,23 +546,23 @@ function Hero({ onLead }: { onLead: () => void }) {
       <div className="absolute inset-0 bg-gradient-to-r from-ink/80 via-ink/50 to-ink/20" aria-hidden="true" />
       <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-ink/60 to-transparent" aria-hidden="true" />
       <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-bg to-transparent" aria-hidden="true" />
-      <div className="relative z-10 mx-auto flex max-w-6xl flex-col px-5 pt-28 pb-16 md:min-h-svh md:justify-center md:pt-24">
+      <div className="relative z-10 mx-auto flex max-w-6xl flex-col px-5 pt-28 pb-14 md:min-h-svh md:justify-center md:pt-24">
         <Reveal>
           <p className="text-base font-medium text-on-ink/80">Худжанд</p>
         </Reveal>
         <Reveal delay={60}>
-          <h1 className="mt-3 max-w-4xl text-4xl leading-[1.08] font-semibold text-on-ink md:text-5xl lg:text-6xl [text-wrap:normal]">
+          <h1 className="mt-2 max-w-4xl text-4xl leading-[1.08] font-semibold text-on-ink md:text-5xl lg:text-6xl [text-wrap:normal]">
             Профессиональная чистка
             <RollingWord />
           </h1>
         </Reveal>
         <Reveal delay={120}>
-          <p className="mt-4 max-w-md text-lg leading-snug text-on-ink/85">
+          <p className="mt-3 max-w-md text-lg leading-snug text-on-ink/85">
             Более 3 лет наводим чистоту в Согде!
           </p>
         </Reveal>
         <Reveal delay={180}>
-          <div className="mt-8 inline-flex w-fit items-end gap-2 rounded-2xl bg-surface px-5 py-4 text-fg shadow-card">
+          <div className="mt-6 inline-flex w-fit items-end gap-2 rounded-2xl bg-surface px-5 py-3.5 text-fg shadow-card">
             <p className="pb-2 text-base font-semibold text-muted">от</p>
             <p className="text-5xl leading-none font-bold tabular-nums">10</p>
             <p className="pb-1 text-base leading-tight font-medium">
@@ -512,7 +573,7 @@ function Hero({ onLead }: { onLead: () => void }) {
           </div>
         </Reveal>
         <Reveal delay={240}>
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
             <a href="#raschet" className={`${btnPrimary} w-full sm:w-auto`}>
               Рассчитать
               <ArrowRight className="size-4" aria-hidden="true" />
@@ -523,7 +584,7 @@ function Hero({ onLead }: { onLead: () => void }) {
           </div>
         </Reveal>
         <Reveal delay={300}>
-          <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-3 text-sm font-medium text-on-ink/75">
+          <ul className="mt-6 flex flex-wrap gap-x-6 gap-y-2.5 text-sm font-medium text-on-ink/75">
             {WHY.map(({ icon: Icon, text }) => (
               <li key={text} className="flex items-center gap-2">
                 <Icon className="size-4 shrink-0 text-on-ink/60" aria-hidden="true" />
@@ -539,15 +600,15 @@ function Hero({ onLead }: { onLead: () => void }) {
 
 function Services({ onPick }: { onPick: (id: string) => void }) {
   return (
-    <section id="uslugi" className="mx-auto max-w-6xl px-5 py-14 md:py-20">
+    <section id="uslugi" className="mx-auto max-w-6xl px-5 py-10 md:py-16">
       <Reveal>
         <p className={kicker}>Услуги и цены</p>
-        <h2 className={`${sectionTitle} mt-3`}>Что чистим</h2>
-        <p className="mt-3 max-w-xl text-base text-muted">
-          Нажмите на услугу — цена сразу подставится в калькулятор.
+        <h2 className={`${sectionTitle} mt-2`}>Что чистим</h2>
+        <p className="mt-2 max-w-xl text-base text-muted">
+          Нажмите на услугу — она добавится в расчёт.
         </p>
       </Reveal>
-      <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {SERVICES.map((item, index) => (
           <Reveal key={item.id} delay={index * 60}>
             <button
@@ -576,8 +637,8 @@ function Services({ onPick }: { onPick: (id: string) => void }) {
                   <span className="mt-1 block text-sm font-medium text-on-ink/75">{item.note}</span>
                 </span>
                 <span className="flex h-9 shrink-0 translate-y-1 items-center gap-1 rounded-full bg-primary px-3.5 text-sm font-semibold text-primary-fg opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100">
-                  Посчитать
-                  <ArrowRight className="size-3.5" aria-hidden="true" />
+                  <Plus className="size-3.5" aria-hidden="true" />
+                  Добавить
                 </span>
               </span>
             </button>
@@ -589,27 +650,26 @@ function Services({ onPick }: { onPick: (id: string) => void }) {
 }
 
 function Calculator({
-  serviceId,
+  items,
   pulse,
-  onService,
+  onUpdate,
+  onRemove,
+  onAdd,
   onOrder,
 }: {
-  serviceId: string;
+  items: CalcItem[];
   pulse: number;
-  onService: (id: string) => void;
-  onOrder: (size: string, total: number | null) => void;
+  onUpdate: (id: string, partial: Partial<CalcItem>) => void;
+  onRemove: (id: string) => void;
+  onAdd: (serviceId?: string) => void;
+  onOrder: (summary: OrderSummary & { size: string }) => void;
 }) {
-  const [length, setLength] = useState("2");
-  const [width, setWidth] = useState("3");
-  const [qty, setQty] = useState(1);
   const [flash, setFlash] = useState(false);
-  const service = serviceById(serviceId);
-  const len = parseMeters(length);
-  const wid = parseMeters(width);
-  const area = len && wid ? len * wid : null;
-  const total = service.unit === "m2" ? (area ? area * service.price : null) : qty * service.price;
-  const shownTotal = useCountUp(total);
-  const freeDelivery = service.unit === "m2" && area !== null && area >= 15 && service.id !== "home";
+  const totals = items.map(itemTotal);
+  const valid = totals.some((total) => total !== null);
+  const grandTotal = valid ? totals.reduce<number>((sum, total) => sum + (total ?? 0), 0) : null;
+  const hasInvalid = totals.some((total) => total === null);
+  const shownTotal = useCountUp(grandTotal);
 
   useEffect(() => {
     if (!pulse) return;
@@ -619,43 +679,30 @@ function Calculator({
   }, [pulse]);
 
   function submitOrder() {
-    if (total === null) {
-      onOrder("", null);
-      return;
-    }
-    const size =
-      service.unit === "m2" && area && len && wid
-        ? `${formatNumber(len)} × ${formatNumber(wid)} м`
-        : `${qty} шт.`;
-    onOrder(size, total);
+    const lines: OrderLine[] = items.map((item) => ({
+      name: serviceById(item.serviceId).name,
+      detail: itemDetail(item),
+      total: itemTotal(item),
+    }));
+    const sum = lines.reduce((acc, line) => acc + (line.total ?? 0), 0);
+    const anyValid = lines.some((line) => line.total !== null);
+    onOrder({
+      lines,
+      total: anyValid ? sum : null,
+      size: lines.length === 1 ? lines[0].detail : "",
+    });
   }
-
-  const breakdown =
-    service.unit === "m2"
-      ? area
-        ? `${formatNumber(area)} м² × ${service.price} сомони`
-        : "Впишите размер — покажем стоимость."
-      : `${qty} × ${service.price} сомони`;
-
-  const delivery =
-    service.unit === "m2" && area !== null
-      ? service.id === "home"
-        ? "Ковролин чистим на месте — вывоз не нужен."
-        : freeDelivery
-          ? "Вывоз и доставка — бесплатно."
-          : "Вывоз и доставка бесплатны от 15 м²."
-      : null;
 
   return (
     <section id="raschet">
-      <div className="mx-auto grid max-w-6xl gap-8 px-5 py-14 md:py-20 lg:grid-cols-12">
+      <div className="mx-auto grid max-w-6xl gap-6 px-5 py-10 md:py-16 lg:grid-cols-12">
         <Reveal className="min-w-0 lg:col-span-4">
           <p className={kicker}>Калькулятор</p>
-          <h2 className={`${sectionTitle} mt-3`}>Сколько выйдет</h2>
-          <p className="mt-4 max-w-xs text-base leading-relaxed text-muted">
-            Укажите услугу и размер — стоимость посчитается сразу.
+          <h2 className={`${sectionTitle} mt-2`}>Сколько выйдет</h2>
+          <p className="mt-2 max-w-xs text-base leading-relaxed text-muted">
+            Добавьте позиции — стоимость посчитается сразу.
           </p>
-          <ul className="mt-6 space-y-2 text-base text-muted">
+          <ul className="mt-5 space-y-1.5 text-base text-muted">
             {["Вывоз и доставка по Худжанду", "От 15 м² — бесплатно", "Оплата после чистки"].map((item) => (
               <li key={item} className="flex items-center gap-2">
                 <Check className="size-4 shrink-0 text-primary" aria-hidden="true" />
@@ -666,144 +713,147 @@ function Calculator({
         </Reveal>
         <Reveal delay={80} className="min-w-0 lg:col-span-8">
           <div
-            className={`rounded-2xl border border-line bg-surface p-5 shadow-card md:p-8 ${flash ? "flash" : ""}`}
+            className={`rounded-2xl border border-line bg-surface p-5 shadow-card md:p-7 ${flash ? "flash" : ""}`}
           >
             <p className="text-base font-medium">Что чистим</p>
-            <div role="radiogroup" aria-label="Что чистим" className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {SERVICES.map((item) => {
-                const on = item.id === service.id;
+            <ul className="mt-3 space-y-3">
+              {items.map((item, index) => {
+                const service = serviceById(item.serviceId);
+                const total = itemTotal(item);
+                const len = parseMeters(item.length);
+                const wid = parseMeters(item.width);
+                const area = len && wid ? len * wid : null;
                 return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={on}
-                    onClick={() => onService(item.id)}
-                    className={`press rounded-xl border p-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
-                      on ? "border-primary bg-primary/5" : "border-line bg-surface hover:border-fg/25"
-                    }`}
-                  >
-                    <span className="flex items-start justify-between gap-2">
-                      <span className="text-sm leading-snug font-semibold">{item.name}</span>
-                      <span
-                        className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border ${
-                          on ? "border-primary bg-primary text-primary-fg" : "border-line"
-                        }`}
-                        aria-hidden="true"
-                      >
-                        {on && <Check className="size-3" />}
+                  <li key={item.id} className="rounded-xl border border-line bg-bg p-4">
+                    <div className="flex items-center gap-2.5">
+                      {items.length > 1 && (
+                        <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                          {index + 1}
+                        </span>
+                      )}
+                      <div className="relative min-w-0 flex-1">
+                        <select
+                          {...calm}
+                          aria-label="Услуга"
+                          className={`${fieldClass} appearance-none pr-10`}
+                          value={item.serviceId}
+                          onChange={(event) => onUpdate(item.id, { serviceId: event.target.value })}
+                        >
+                          {SERVICES.map((entry) => (
+                            <option key={entry.id} value={entry.id}>
+                              {entry.name} — {entry.price} {entry.hint}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted" />
+                      </div>
+                      {items.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => onRemove(item.id)}
+                          aria-label="Убрать позицию"
+                          className="press grid size-11 shrink-0 place-items-center rounded-xl border border-line bg-surface text-muted hover:border-primary/40 hover:text-primary"
+                        >
+                          <X className="size-4" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="mt-3">
+                      {service.unit === "m2" ? (
+                        <div className="grid grid-cols-2 gap-3">
+                          <label className="block text-base font-medium">
+                            Длина, м
+                            <input
+                              {...calm}
+                              className={`${fieldClass} mt-1.5`}
+                              inputMode="decimal"
+                              value={item.length}
+                              onChange={(event) => onUpdate(item.id, { length: event.target.value })}
+                            />
+                          </label>
+                          <label className="block text-base font-medium">
+                            Ширина, м
+                            <input
+                              {...calm}
+                              className={`${fieldClass} mt-1.5`}
+                              inputMode="decimal"
+                              value={item.width}
+                              onChange={(event) => onUpdate(item.id, { width: event.target.value })}
+                            />
+                          </label>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-base text-muted">{service.qtyLabel ?? "Сколько?"}</p>
+                          <div className="flex items-center gap-2.5">
+                            <button
+                              type="button"
+                              className="press inline-flex size-11 items-center justify-center rounded-xl border border-line bg-surface hover:border-fg/25 disabled:cursor-not-allowed disabled:opacity-40"
+                              onClick={() => onUpdate(item.id, { qty: Math.max(1, item.qty - 1) })}
+                              disabled={item.qty <= 1}
+                              aria-label="Меньше"
+                            >
+                              <Minus className="size-4" />
+                            </button>
+                            <span className="w-10 text-center text-3xl font-bold tabular-nums">{item.qty}</span>
+                            <button
+                              type="button"
+                              className="press inline-flex size-11 items-center justify-center rounded-xl border border-line bg-surface hover:border-fg/25 disabled:cursor-not-allowed disabled:opacity-40"
+                              onClick={() => onUpdate(item.id, { qty: Math.min(12, item.qty + 1) })}
+                              disabled={item.qty >= 12}
+                              aria-label="Больше"
+                            >
+                              <Plus className="size-4" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <p className="mt-2.5 flex items-center justify-between gap-3 text-base">
+                      <span className="min-w-0 text-muted">
+                        {service.unit === "m2"
+                          ? area
+                            ? `${formatNumber(area)} м² × ${service.price} сомони`
+                            : "Впишите размер"
+                          : `${item.qty} × ${service.price} сомони`}
                       </span>
-                    </span>
-                    <span className="mt-1 block text-sm text-muted">
-                      {item.price} {item.hint}
-                    </span>
-                  </button>
+                      <span className="shrink-0 font-semibold tabular-nums">
+                        {total === null ? "—" : `${somoni(total)} сомони`}
+                      </span>
+                    </p>
+                  </li>
                 );
               })}
-            </div>
-            <p className="mt-4 text-base text-muted">{service.note}</p>
+            </ul>
+            <button
+              type="button"
+              onClick={() => onAdd()}
+              className="press mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-line text-base font-medium text-muted hover:border-primary/50 hover:text-primary"
+            >
+              <Plus className="size-4" aria-hidden="true" />
+              Добавить ещё
+            </button>
 
-            {service.unit === "m2" ? (
-              <div className="mt-6">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-base font-medium">Размер ковра</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {PRESETS.map((preset) => {
-                      const on =
-                        parseMeters(length) === parseMeters(preset.length) &&
-                        parseMeters(width) === parseMeters(preset.width);
-                      return (
-                        <button
-                          key={preset.label}
-                          type="button"
-                          onClick={() => {
-                            setLength(preset.length);
-                            setWidth(preset.width);
-                          }}
-                          className={`press h-8 rounded-full border px-3 text-sm font-medium ${
-                            on
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-line bg-bg text-muted hover:border-fg/25 hover:text-fg"
-                          }`}
-                        >
-                          {preset.label} м
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-3">
-                  <label className="block text-base font-medium">
-                    Длина, м
-                    <input
-                      {...calm}
-                      className={`${fieldClass} mt-2`}
-                      inputMode="decimal"
-                      value={length}
-                      onChange={(event) => setLength(event.target.value)}
-                    />
-                  </label>
-                  <label className="block text-base font-medium">
-                    Ширина, м
-                    <input
-                      {...calm}
-                      className={`${fieldClass} mt-2`}
-                      inputMode="decimal"
-                      value={width}
-                      onChange={(event) => setWidth(event.target.value)}
-                    />
-                  </label>
-                </div>
-                <p className="mt-3 text-base text-muted">
-                  {area ? `Площадь: ${formatNumber(area)} м²` : "Впишите длину и ширину — посчитаем площадь."}
-                </p>
-              </div>
-            ) : (
-              <div className="mt-6">
-                <p className="text-base font-medium">{service.qtyLabel ?? "Сколько?"}</p>
-                <div className="mt-3 flex items-center gap-3">
-                  <button
-                    type="button"
-                    className="press inline-flex size-12 items-center justify-center rounded-xl border border-line bg-surface hover:border-fg/25 disabled:cursor-not-allowed disabled:opacity-40"
-                    onClick={() => setQty((value) => Math.max(1, value - 1))}
-                    disabled={qty <= 1}
-                    aria-label="Меньше"
-                  >
-                    <Minus className="size-4" />
-                  </button>
-                  <span className="w-12 text-center text-4xl font-bold tabular-nums">{qty}</span>
-                  <button
-                    type="button"
-                    className="press inline-flex size-12 items-center justify-center rounded-xl border border-line bg-surface hover:border-fg/25 disabled:cursor-not-allowed disabled:opacity-40"
-                    onClick={() => setQty((value) => Math.min(12, value + 1))}
-                    disabled={qty >= 12}
-                    aria-label="Больше"
-                  >
-                    <Plus className="size-4" />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div className="mt-6 border-t border-line pt-6">
-              <div className="flex items-end justify-between gap-4">
-                <div>
-                  <p className="text-base text-muted">Ориентир</p>
-                  <p className="mt-1 text-5xl leading-none font-bold tabular-nums">
-                    {shownTotal === null ? "—" : somoni(shownTotal)}
+            <div className="mt-5 flex items-end justify-between gap-4 border-t border-line pt-5">
+              <div>
+                <p className="text-base text-muted">Ориентир</p>
+                {hasInvalid && (
+                  <p className="mt-1 max-w-[16rem] text-sm text-muted">
+                    Впишите размер, чтобы учесть все позиции.
                   </p>
-                </div>
-                {shownTotal !== null && <p className="pb-1 text-base font-medium text-muted">сомони</p>}
+                )}
               </div>
-              <p className="mt-3 text-base text-muted">{breakdown}</p>
-              {delivery && <p className="mt-1 text-base text-muted">{delivery}</p>}
+              <p className="text-right text-4xl leading-none font-bold tabular-nums">
+                {shownTotal === null ? "—" : somoni(shownTotal)}
+                {shownTotal !== null && <span className="ml-1.5 text-base font-medium text-muted">сомони</span>}
+              </p>
             </div>
-            <button type="button" className={`${btnPrimary} mt-6 w-full`} onClick={submitOrder}>
-              {total === null ? (
+            <button type="button" className={`${btnPrimary} mt-5 w-full`} onClick={submitOrder}>
+              {grandTotal === null ? (
                 "Оформить заявку"
               ) : (
                 <>
-                  Оформить заявку · {somoni(total)} сомони
+                  Оформить заявку · {somoni(grandTotal)} сомони
                   <ArrowRight className="size-4" aria-hidden="true" />
                 </>
               )}
@@ -817,13 +867,13 @@ function Calculator({
 
 function Process() {
   return (
-    <section id="kak" className="mx-auto max-w-6xl px-5 py-14 md:py-20">
+    <section id="kak" className="mx-auto max-w-6xl px-5 py-10 md:py-16">
       <Reveal>
         <p className={kicker}>Процесс</p>
-        <h2 className={`${sectionTitle} mt-3`}>Как проходит</h2>
-        <p className="mt-3 max-w-xl text-base text-muted">От заявки до чистого ковра — четыре шага.</p>
+        <h2 className={`${sectionTitle} mt-2`}>Как проходит</h2>
+        <p className="mt-2 max-w-xl text-base text-muted">От заявки до чистого ковра — четыре шага.</p>
       </Reveal>
-      <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {STEPS.map((step, index) => {
           const Icon = step.icon;
           return (
@@ -835,7 +885,7 @@ function Process() {
                   </span>
                   <span className="text-sm font-semibold text-muted">{step.n}</span>
                 </div>
-                <p className="mt-4 text-xl font-semibold">{step.title}</p>
+                <p className="mt-3 text-xl font-semibold">{step.title}</p>
                 <p className="mt-1 text-base leading-relaxed text-muted">{step.text}</p>
               </div>
             </Reveal>
@@ -859,17 +909,17 @@ function BeforeAfter() {
   const item = CASES.find((entry) => entry.id === id) ?? CASES[0];
 
   return (
-    <section className="mx-auto max-w-6xl px-5 py-14 md:py-20" aria-labelledby="before-title">
+    <section className="mx-auto max-w-6xl px-5 py-10 md:py-16" aria-labelledby="before-title">
       <Reveal>
         <p className={kicker}>Результаты</p>
-        <h2 id="before-title" className={`${sectionTitle} mt-3`}>
+        <h2 id="before-title" className={`${sectionTitle} mt-2`}>
           До и после
         </h2>
-        <p className="mt-3 max-w-xl text-base text-muted">
+        <p className="mt-2 max-w-xl text-base text-muted">
           Фото с наших заказов: слева — до чистки, справа — после.
         </p>
       </Reveal>
-      <Reveal delay={80} className="mt-8">
+      <Reveal delay={80} className="mt-6">
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
           <div key={item.id} className="case-in overflow-hidden rounded-2xl border border-line shadow-card">
             <div className="grid sm:grid-cols-2">
@@ -936,21 +986,21 @@ function BeforeAfter() {
 
 function Faq() {
   return (
-    <section id="voprosy" className="mx-auto max-w-6xl px-5 py-14 md:py-20">
+    <section id="voprosy" className="mx-auto max-w-6xl px-5 py-10 md:py-16">
       <Reveal>
         <p className={kicker}>Вопросы</p>
-        <h2 className={`${sectionTitle} mt-3`}>Частые вопросы</h2>
+        <h2 className={`${sectionTitle} mt-2`}>Частые вопросы</h2>
       </Reveal>
       <Reveal delay={80}>
         <Accordion.Root
           type="single"
           collapsible
-          className="mt-8 rounded-2xl border border-line bg-surface px-5 md:px-8"
+          className="mt-6 rounded-2xl border border-line bg-surface px-5 md:px-7"
         >
           {FAQ.map((item) => (
             <Accordion.Item key={item.q} value={item.q} className="border-b border-line last:border-b-0">
               <Accordion.Header>
-                <Accordion.Trigger className="group flex w-full items-center justify-between gap-4 py-5 text-left text-lg font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+                <Accordion.Trigger className="group flex w-full items-center justify-between gap-4 py-4 text-left text-lg font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
                   {item.q}
                   <ChevronDown
                     className="size-5 shrink-0 text-muted transition-transform duration-200 group-data-[state=open]:rotate-180"
@@ -959,7 +1009,7 @@ function Faq() {
                 </Accordion.Trigger>
               </Accordion.Header>
               <Accordion.Content className="acc-content">
-                <div className="pb-5 text-base leading-relaxed text-muted">{item.a}</div>
+                <div className="pb-4 text-base leading-relaxed text-muted">{item.a}</div>
               </Accordion.Content>
             </Accordion.Item>
           ))}
@@ -978,7 +1028,6 @@ function Lead({
   onPatch,
   onHoney,
   onStatus,
-  onService,
   onClearOrder,
 }: {
   draft: Draft;
@@ -989,7 +1038,6 @@ function Lead({
   onPatch: (partial: Partial<Draft>) => void;
   onHoney: (value: string) => void;
   onStatus: (status: "form" | "sent") => void;
-  onService: (id: string) => void;
   onClearOrder: () => void;
 }) {
   const [errors, setErrors] = useState<{ name?: string; phone?: string }>({});
@@ -1018,7 +1066,6 @@ function Lead({
   if (draft.district) recap.push({ label: "Район", value: draft.district });
   recap.push({ label: "Когда", value: draft.when });
   if (draft.comment.trim()) recap.push({ label: "Комментарий", value: draft.comment.trim() });
-  if (order && order.total !== null) recap.push({ label: "Ориентир", value: `${somoni(order.total)} сомони` });
 
   return (
     <section id="zayavka" className="relative overflow-hidden bg-ink text-on-ink">
@@ -1026,24 +1073,24 @@ function Lead({
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(620px_320px_at_18%_0%,rgba(194,75,40,0.18),transparent_70%)]"
         aria-hidden="true"
       />
-      <div className="relative mx-auto grid max-w-6xl gap-10 px-5 py-16 md:grid-cols-12 md:py-24">
+      <div className="relative mx-auto grid max-w-6xl gap-8 px-5 py-12 md:grid-cols-12 md:py-16">
         <Reveal className="min-w-0 md:col-span-5">
           <p className={kicker}>Заявка</p>
-          <h2 className={`${sectionTitle} mt-3 text-on-ink`}>Оставить заявку</h2>
-          <p className="mt-4 max-w-sm text-base leading-relaxed text-on-ink/75">
+          <h2 className={`${sectionTitle} mt-2 text-on-ink`}>Оставить заявку</h2>
+          <p className="mt-3 max-w-sm text-base leading-relaxed text-on-ink/75">
             Заполните форму — перезвоним и подтвердим время. Или позвоните сами:
           </p>
           <a
             href={TEL}
-            className="press mt-6 inline-flex h-12 items-center gap-2 rounded-xl border border-on-ink/30 px-5 text-base font-medium text-on-ink hover:bg-on-ink/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-on-ink"
+            className="press mt-5 inline-flex h-12 items-center gap-2 rounded-xl border border-on-ink/30 px-5 text-base font-medium text-on-ink hover:bg-on-ink/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-on-ink"
           >
             <Phone className="size-4" aria-hidden="true" />
             {PHONE}
           </a>
-          <p className="mt-3 text-sm text-on-ink/60">Ежедневно 8:00–20:00 · Худжанд и Согд</p>
+          <p className="mt-2.5 text-sm text-on-ink/60">Ежедневно 8:00–20:00 · Худжанд и Согд</p>
         </Reveal>
         <Reveal delay={80} className="min-w-0 md:col-span-7">
-          <div className="rounded-2xl bg-surface p-5 text-fg md:p-8">
+          <div className="rounded-2xl bg-surface p-5 text-fg md:p-7">
             {status === "sent" ? (
               <div className="pop-in">
                 <div className="flex items-center gap-4">
@@ -1072,7 +1119,7 @@ function Lead({
                     <p className="mt-1 text-base text-muted">Перезвоним и подтвердим время.</p>
                   </div>
                 </div>
-                <dl className="mt-6 space-y-2 rounded-xl border border-line bg-bg p-4 text-base">
+                <dl className="mt-5 space-y-2 rounded-xl border border-line bg-bg p-4 text-base">
                   {recap.map((row) => (
                     <div key={row.label} className="flex justify-between gap-4">
                       <dt className="shrink-0 text-muted">{row.label}</dt>
@@ -1080,6 +1127,30 @@ function Lead({
                     </div>
                   ))}
                 </dl>
+                {order && order.lines.length > 0 && (
+                  <div className="mt-3 rounded-xl border border-line bg-bg p-4">
+                    <p className="text-sm font-semibold text-primary">Расчёт из калькулятора</p>
+                    <ul className="mt-2 space-y-1 text-base">
+                      {order.lines.map((line, index) => (
+                        <li key={index} className="flex justify-between gap-3">
+                          <span className="min-w-0">
+                            {line.name}
+                            {line.detail ? ` · ${line.detail}` : ""}
+                          </span>
+                          <span className="shrink-0 font-medium tabular-nums">
+                            {line.total === null ? "—" : `${somoni(line.total)} сомони`}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    {order.total !== null && (
+                      <p className="mt-2 flex justify-between gap-3 border-t border-line pt-2 text-base font-semibold">
+                        <span>Итого</span>
+                        <span className="tabular-nums">{somoni(order.total)} сомони</span>
+                      </p>
+                    )}
+                  </div>
+                )}
                 <button type="button" className={`${btnGhost} mt-5`} onClick={() => onStatus("form")}>
                   Изменить заявку
                 </button>
@@ -1098,25 +1169,37 @@ function Lead({
                     />
                   </label>
                 </div>
-                {order && (
-                  <div className="mb-5 flex items-start justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4">
-                    <div className="min-w-0">
+                {order && order.lines.length > 0 && (
+                  <div className="mb-4 rounded-xl border border-primary/30 bg-primary/5 p-4">
+                    <div className="flex items-start justify-between gap-3">
                       <p className="text-sm font-semibold text-primary">Расчёт из калькулятора</p>
-                      <p className="mt-1 text-base font-medium">
-                        {serviceById(order.serviceId).name}
-                        {order.size ? ` · ${order.size}` : ""}
-                      </p>
-                      {order.total !== null && (
-                        <p className="text-base text-muted">Ориентир: {somoni(order.total)} сомони</p>
-                      )}
+                      <button
+                        type="button"
+                        className="press shrink-0 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium hover:border-fg/25"
+                        onClick={() => scrollToId("raschet")}
+                      >
+                        Изменить
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      className="press shrink-0 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium hover:border-fg/25"
-                      onClick={() => scrollToId("raschet")}
-                    >
-                      Изменить
-                    </button>
+                    <ul className="mt-2 space-y-1 text-base">
+                      {order.lines.map((line, index) => (
+                        <li key={index} className="flex justify-between gap-3">
+                          <span className="min-w-0">
+                            {line.name}
+                            {line.detail ? ` · ${line.detail}` : ""}
+                          </span>
+                          <span className="shrink-0 font-medium tabular-nums">
+                            {line.total === null ? "—" : `${somoni(line.total)} сомони`}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    {order.lines.length > 1 && order.total !== null && (
+                      <p className="mt-2 flex justify-between gap-3 border-t border-primary/20 pt-2 text-base font-semibold">
+                        <span>Итого</span>
+                        <span className="tabular-nums">{somoni(order.total)} сомони</span>
+                      </p>
+                    )}
                   </div>
                 )}
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -1126,7 +1209,7 @@ function Lead({
                       {...calm}
                       id="lead-name"
                       ref={nameRef}
-                      className={`${fieldClass} mt-2 ${errors.name ? "border-primary" : ""}`}
+                      className={`${fieldClass} mt-1.5 ${errors.name ? "border-primary" : ""}`}
                       autoComplete="name"
                       value={draft.name}
                       onChange={(event) => {
@@ -1140,7 +1223,7 @@ function Lead({
                     Телефон
                     <input
                       {...calm}
-                      className={`${fieldClass} mt-2 ${errors.phone ? "border-primary" : ""}`}
+                      className={`${fieldClass} mt-1.5 ${errors.phone ? "border-primary" : ""}`}
                       inputMode="tel"
                       autoComplete="tel"
                       placeholder="92 123 45 67"
@@ -1155,13 +1238,13 @@ function Lead({
                 </div>
                 <label className="mt-4 block text-base font-medium">
                   Услуга
-                  <div className="relative mt-2">
+                  <div className="relative mt-1.5">
                     <select
                       {...calm}
                       className={`${fieldClass} appearance-none pr-10`}
                       value={draft.service}
                       onChange={(event) => {
-                        onService(event.target.value);
+                        onPatch({ service: event.target.value });
                         onClearOrder();
                       }}
                     >
@@ -1179,7 +1262,7 @@ function Lead({
                     Размер
                     <input
                       {...calm}
-                      className={`${fieldClass} mt-2`}
+                      className={`${fieldClass} mt-1.5`}
                       placeholder="2 × 3 м"
                       value={draft.size}
                       onChange={(event) => {
@@ -1190,7 +1273,7 @@ function Lead({
                   </label>
                   <label className="block text-base font-medium">
                     Район
-                    <div className="relative mt-2">
+                    <div className="relative mt-1.5">
                       <select
                         {...calm}
                         className={`${fieldClass} appearance-none pr-10`}
@@ -1210,7 +1293,7 @@ function Lead({
                 </div>
                 <fieldset className="mt-4">
                   <legend className="text-base font-medium">Когда забрать</legend>
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="mt-1.5 flex flex-wrap gap-2">
                     {WHENS.map((when) => {
                       const on = draft.when === when;
                       return (
@@ -1232,13 +1315,13 @@ function Lead({
                   Комментарий
                   <textarea
                     {...calm}
-                    className={`${fieldClass} mt-2 h-auto min-h-28 py-3`}
+                    className={`${fieldClass} mt-1.5 h-auto min-h-24 py-3`}
                     placeholder="Пятна, животные, подъезд"
                     value={draft.comment}
                     onChange={(event) => onPatch({ comment: event.target.value })}
                   />
                 </label>
-                <button type="submit" className={`${btnPrimary} mt-5 w-full`}>
+                <button type="submit" className={`${btnPrimary} mt-4 w-full`}>
                   Отправить заявку
                 </button>
               </form>
@@ -1253,46 +1336,49 @@ function Lead({
 function Footer() {
   return (
     <footer className="border-t border-line">
-      <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-10 md:flex-row md:items-start md:justify-between">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-8 md:flex-row md:items-start md:justify-between">
         <div className="max-w-xs">
           <p className="text-xl font-semibold">
             Pokizakor<span className="text-primary">.tj</span>
           </p>
-          <p className="mt-2 text-base text-muted">
+          <p className="mt-1.5 text-base text-muted">
             Стирка и химчистка ковров, диванов и ковролина в Худжанде.
           </p>
         </div>
-        <nav className="flex flex-col gap-2 text-base" aria-label="Разделы">
+        <nav className="flex flex-col gap-1.5 text-base" aria-label="Разделы">
           {NAV.map((item) => (
             <a key={item.href} href={item.href} className="w-fit text-muted hover:text-fg">
               {item.label}
             </a>
           ))}
         </nav>
-        <div className="flex flex-col items-start gap-2">
+        <div className="flex flex-col items-start gap-1.5">
           <a href={TEL} className="text-lg font-semibold">
             {PHONE}
           </a>
           <p className="text-base text-muted">Ежедневно 8:00–20:00</p>
         </div>
       </div>
-      <p className="mx-auto max-w-6xl px-5 pb-8 text-sm text-muted">© Pokizakor.tj — чистые ковры в Худжанде</p>
+      <p className="mx-auto max-w-6xl px-5 pb-6 text-sm text-muted">© Pokizakor.tj — чистые ковры в Худжанде</p>
     </footer>
   );
 }
 
 function Dock({ onLead }: { onLead: () => void }) {
   return (
-    <div className="dock fixed inset-x-0 bottom-0 z-50 border-t border-line bg-surface shadow-[0_-12px_30px_-18px_rgba(20,33,27,0.45)] md:hidden">
-      <div className="grid grid-cols-2">
-        <a href={TEL} className="press inline-flex h-16 items-center justify-center gap-2 text-base font-medium">
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 md:hidden">
+      <div className="dock pointer-events-auto mx-auto flex max-w-md items-center gap-3 px-4 pt-3">
+        <a
+          href={TEL}
+          className="press inline-flex h-14 flex-1 items-center justify-center gap-2 rounded-full border border-line bg-surface/95 text-base font-medium shadow-card backdrop-blur-md"
+        >
           <Phone className="size-5 text-primary" aria-hidden="true" />
           Позвонить
         </a>
         <button
           type="button"
           onClick={onLead}
-          className="press inline-flex h-16 items-center justify-center bg-primary text-base font-medium text-primary-fg"
+          className="press inline-flex h-14 flex-1 items-center justify-center gap-2 rounded-full bg-primary text-base font-medium text-primary-fg shadow-card"
         >
           Заявка
         </button>
